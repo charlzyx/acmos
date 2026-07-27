@@ -1,7 +1,381 @@
 # acmos
 
-acmos — 交流电般丝滑切换的多协议 AI 代理。对下游提供 OpenAI Chat Completions、Anthropic Messages 和 OpenAI Responses；对上游可按 provider 使用 `cc`、`am` 或 `resp` 协议。`combo/*` 是按顺序 fallback 的虚拟模型。
+[English](#english) | [中文](#中文)
 
+---
+
+<a id="english"></a>
+
+acmos — a multi-format AI proxy with silky-smooth switching, AC-style. Exposes OpenAI Chat Completions, Anthropic Messages, and OpenAI Responses downstream; speaks `cc`, `am`, or `resp` upstream per provider. `combo/*` are virtual models that fall back in order.
+
+## Features
+
+- Ingress-to-upstream protocol conversion: Chat Completions, Messages, Responses.
+- `combo/*`: same-wire candidates first, ordered fallback, target cooldown, session stickiness, multi-key failover within a provider.
+- models.dev + upstream model directory sync; `GET /v1/models` exposes capability info.
+- `visionSidecar`: when the target doesn't support images, a direct vision model describes the image first, then the image is replaced with text before hitting the target.
+- ChatGPT Codex OAuth credential reuse and refresh: reads the official `~/.codex/auth.json`.
+- Hot-reload config, redacted JSONL logs, and a runtime config snapshot.
+
+## Install
+
+```bash
+brew tap charlzyx/acmos https://github.com/charlzyx/acmos
+brew install acmos
+```
+
+Prepare config:
+
+```bash
+mkdir -p ~/.acmos
+cp config.example.yml ~/.acmos/config.yml
+```
+
+Put secrets in `~/.acmos/.env`:
+
+```dotenv
+DEEPSEEK_API_KEY=...
+OPENCODE_KEY_1=...
+ARK_API_KEY=...
+```
+
+Reference env vars in config via `${env:NAME}`. Shell-exported vars take precedence over `.env`.
+
+Config path resolution:
+
+- `ACMOS_CONFIG=/absolute/path/config.yml`: explicit config file.
+- `ACMOS_HOME=/absolute/path`: data directory; defaults to `~/.acmos`.
+
+Start the service:
+
+```bash
+brew services start acmos
+```
+
+| Command | Action |
+|---|---|
+| `brew services start acmos` | Start and enable at login |
+| `brew services stop acmos` | Stop |
+| `brew services restart acmos` | Restart |
+| `brew services info acmos` | Status |
+| `brew upgrade acmos` | Upgrade |
+
+Listens on `http://127.0.0.1:20129` by default. Health check:
+
+```bash
+curl http://127.0.0.1:20129/health
+```
+
+If `apiKeys` is set, all `/v1/*` requests require a Bearer token:
+
+```bash
+curl http://127.0.0.1:20129/v1/models \
+  -H 'Authorization: Bearer your-local-key'
+```
+
+## Quick Start (Free Tier)
+
+No upstream API key? Try OpenCode Zen's free tier ([register for a free key](https://opencode.ai)). For higher rate limits, use [OpenCode Go](https://opencode.ai/go?ref=WZ29Q4GHM0) (referral link).
+
+`~/.acmos/config.yml`:
+
+```yaml
+providers:
+  opencode:
+    wire: cc
+    baseUrl: https://opencode.ai/zen/v1
+    apiKey: "${env:OPENCODE_KEY}"
+    defaults:
+      compat:
+        supportsDeveloperRole: false
+        maxTokensField: max_tokens
+    models:
+      - id: deepseek-v4-flash-free
+      - id: mimo-v2.5-free
+      - id: ling-3.0-flash-free
+      - id: nemotron-3-ultra-free
+      - id: north-mini-code-free
+      - id: laguna-s-2.1-free
+
+combo:
+  free:
+    description: Free tier, ordered fallback
+    members:
+      - { provider: opencode, model: deepseek-v4-flash-free }
+      - { provider: opencode, model: mimo-v2.5-free }
+      - { provider: opencode, model: ling-3.0-flash-free }
+      - { provider: opencode, model: nemotron-3-ultra-free }
+      - { provider: opencode, model: north-mini-code-free }
+      - { provider: opencode, model: laguna-s-2.1-free }
+```
+
+`~/.acmos/.env`:
+
+```dotenv
+OPENCODE_KEY=sk-...   # get a free key at opencode.ai
+```
+
+```bash
+brew services restart acmos
+curl http://127.0.0.1:20129/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"combo/free","messages":[{"role":"user","content":"be concise, say OK"}]}'
+```
+
+## Downstream API
+
+| API | Path |
+| --- | --- |
+| OpenAI Chat Completions | `POST /v1/chat/completions` |
+| Anthropic Messages | `POST /v1/messages` |
+| OpenAI Responses | `POST /v1/responses` |
+| Model list | `GET /v1/models` |
+| Health check | `GET /health` |
+
+Prefer combo: `combo/max`, `combo/coder`, `combo/fast`, `combo/free`. Direct models use `provider/model-id`, e.g. `codex/gpt-5.6-terra`. Providers can have `aliases`; models don't use aliases.
+
+Chat Completions example:
+
+```bash
+curl http://127.0.0.1:20129/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer your-local-key' \
+  -d '{
+    "model": "combo/coder",
+    "messages": [{"role": "user", "content": "reply OK only"}]
+  }'
+```
+
+### Wire Paths
+
+`cc` = OpenAI Chat Completions, `am` = Anthropic Messages, `resp` = OpenAI Responses. Combo prefers same-wire members; only falls back to conversion when no same-wire candidate is available or all fail.
+
+```text
+Downstream Chat Completions (/v1/chat/completions, cc)
+├── upstream cc
+│   └── CC request ──> /chat/completions ──> CC response
+├── upstream am
+│   └── CC ──convert──> AM request ──> /messages ──> AM ──convert──> CC response
+└── upstream resp
+    └── CC ──convert──> Responses request ──> /responses ──> Responses ──convert──> CC response
+
+Downstream Anthropic Messages (/v1/messages, am)
+├── upstream am
+│   └── AM passthrough (only replace model; image sidecar rewrites images then rebuilds AM request)
+├── upstream cc
+│   └── AM ──convert──> CC request ──> /chat/completions ──> CC ──convert──> AM response
+└── upstream resp
+    └── AM ──convert──> CC ──convert──> Responses request ──> /responses
+        └── Responses ──convert──> CC ──convert──> AM response
+
+Downstream OpenAI Responses (/v1/responses, resp)
+└── Responses ──normalized to CC──> reuse the CC paths above by target wire
+    └── final CC response/stream ──convert──> Responses response/stream
+```
+
+```text
+combo/fast selection example
+├── cc ingress
+│   └── try all wire=cc Flash members first
+│       └── only when cc members fail, try wire=am DeepSeek Flash
+├── am ingress
+│   └── try wire=am DeepSeek Flash first
+│       └── only when AM member fails, try cc members
+└── resp ingress
+    └── no resp Flash member currently, fall back to other wires in config order
+```
+
+```text
+Image sidecar (orthogonal to wire selection)
+├── target supports vision
+│   └── original image sent directly to target
+└── target does not support vision
+    ├── visionSidecar model describes the image
+    ├── image_url ──> [image: description]
+    ├── rewritten request sent to target
+    └── if fallback occurs during this request
+        └── reuse the same description, don't call the vision model again
+```
+
+## Configuration
+
+Full example in [`config.example.yml`](./config.example.yml). Common top-level fields:
+
+```yaml
+host: 127.0.0.1
+port: 20129
+apiKeys: ["${env:ACMOS_API_KEY}"]
+proxy: http://127.0.0.1:7890
+
+log:
+  level: info             # debug | info | warn | error
+  file: true
+  captureBody: false      # logs request/response bodies when enabled; short-term debugging only
+  retentionDays: 7
+
+visionSidecar:
+  enabled: true
+  model: codex/gpt-5.6-luna
+  maxTokens: 1024
+```
+
+### Provider
+
+```yaml
+providers:
+  example:
+    wire: cc              # cc | am | resp
+    baseUrl: https://example.com/v1
+    aliases: [example-ai]
+    apiKey: "${env:EXAMPLE_API_KEY}"
+    timeoutMs: 600000
+    firstByteTimeoutMs: 60000
+    models:
+      - id: example-model
+```
+
+Auth methods:
+
+- `apiKey`: Bearer token shorthand; a string or array of keys.
+- `auth.type: bearer`: standard `Authorization: Bearer ...`.
+- `auth.type: header`: custom header, e.g. Anthropic's `x-api-key`.
+- `auth.type: chatgpt-oauth`: reuse official Codex login. Run `codex login` first, then set `credentialsPath`, usually `~/.codex/auth.json`.
+- `auth.type: none`: no upstream auth.
+
+For multiple keys, use `auth.keyStrategy`: `round-robin`, `sticky`, or `failover`. `failover` tries the next key when the current one returns a retryable error.
+
+### Combo
+
+Combo groups by ingress wire first: `cc`, `am`, `resp` requests prefer same-wire members to avoid unnecessary conversion; within a group, config order and session stickiness are preserved. Other-wire members are only tried when no same-wire candidate exists or all fail. Upstream switching is only allowed before the first byte is sent.
+
+To expose the same service via multiple wires, put them all in one combo:
+
+```yaml
+combo:
+  coder:
+    sticky: true
+    members:
+      - { provider: codex, model: gpt-5.6-terra }       # resp
+      - { provider: opencode, model: glm-5.2 }          # cc
+      - { provider: deepseek-am, model: deepseek-v4-flash } # am
+```
+
+### Vision Sidecar
+
+`visionSidecar` processes the internal normalized `image_url` content block; both Chat Completions and Anthropic image inputs go through this:
+
+1. Target model declares `vision: true`: original image sent directly.
+2. Target doesn't support vision: sidecar calls a direct vision model to describe the image.
+3. acmos replaces the image with `[image: ...]` text, then sends to the target.
+4. Sidecar failure: original request is preserved; the error is logged.
+
+The sidecar model must be a configured direct vision model, not a combo, to avoid recursive fallback.
+
+## CLI Integration
+
+For any OpenAI-compatible client, point the base URL to `http://127.0.0.1:20129/v1` and use a local key from `apiKeys`.
+
+Pi / OMP provider form:
+
+```yaml
+providers:
+  combo:
+    baseUrl: http://127.0.0.1:20129/v1
+    apiKey: your-local-key
+    api: openai-completions
+```
+
+Claude Code uses Anthropic Messages; user-level `~/.claude/settings.json`:
+
+```json
+{
+  "model": "combo/coder",
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:20129",
+    "ANTHROPIC_API_KEY": "your-local-key",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "combo/max",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "combo/coder",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "combo/fast"
+  }
+}
+```
+
+## Development
+
+Prerequisite: Bun >= 1.2.
+
+```bash
+bun install
+bun run dev       # start with file-watch auto-restart
+bun run typecheck
+bun run lint
+bun run test
+bun run format
+```
+
+Build a standalone binary (for release):
+
+```bash
+bun build --compile src/cli.ts --outfile dist/acmos
+```
+
+Config changes hot-reload; parse or cross-validation failures keep the old config. A redacted snapshot is written on startup or successful reload:
+
+```text
+~/.acmos/config.snapshot.yaml
+```
+
+## Logging & Troubleshooting
+
+Logs go to both stderr and JSONL files:
+
+```text
+~/.acmos/logs/acmos-YYYY-MM-DD.jsonl
+```
+
+Each request log carries a `reqId`. Use it to trace "request received" → "upstream response headers arrived" → "request completed" or failure:
+
+```bash
+# watch service stderr live
+bun run start
+
+# trace a single request's full path
+jq 'select(.reqId == "abcd1234")' ~/.acmos/logs/acmos-$(date +%F).jsonl
+
+# find fallback, cooldown, and auth issues
+jq 'select(.level == "warn" or .level == "error")' ~/.acmos/logs/acmos-$(date +%F).jsonl
+```
+
+Common symptoms:
+
+| Symptom | Check first |
+| --- | --- |
+| `401` / `auth` | ingress `apiKeys`, provider key, Codex `auth.json` validity |
+| `429` / `quota` | provider rate limit; logs for cooldown, fallback targets, key failover |
+| `504` / `timeout` | `firstByteTimeoutMs`, `timeoutMs`, proxy connectivity |
+| `400` / `badRequest` | upstream wire and `compat` settings; temporarily enable body capture |
+| Image request failure | `visionSidecar` enabled, sidecar model is a vision model, sidecar request logs |
+| Model not found | `GET /v1/models`, provider `models`, combo member references, upstream directory sync |
+
+Body-level debugging: set `log.level` to `debug` and temporarily set `log.captureBody: true`; turn it off immediately after reproducing. Recorded bodies may contain user content; logs recursively redact common token/header fields, but treat them as sensitive.
+
+## Security Boundary
+
+- Never commit `~/.acmos/.env`, `~/.acmos/config.yml`, OAuth credentials, or logs.
+- `config.snapshot.yaml` is redacted and for audit only.
+- Bind to `127.0.0.1` recommended; to listen externally, configure strong random `apiKeys` and use a reverse proxy for TLS and access control.
+
+## Support
+
+If acmos helps you, consider [supporting me on 爱发电](https://afdian.com/a/charlzyx) or follow me on [Twitter/X @chaogpt](https://twitter.com/chaogpt).
+
+---
+
+<a id="中文"></a>
+
+# acmos（中文）
+
+acmos — 交流电般丝滑切换的多协议 AI 代理。对下游提供 OpenAI Chat Completions、Anthropic Messages 和 OpenAI Responses；对上游可按 provider 使用 `cc`、`am` 或 `resp` 协议。`combo/*` 是按顺序 fallback 的虚拟模型。
 
 ## 能力
 
@@ -118,6 +492,17 @@ curl http://127.0.0.1:20129/v1/chat/completions \
 ```
 
 ## 下游 API
+
+| API | 路径 |
+| --- | --- |
+| OpenAI Chat Completions | `POST /v1/chat/completions` |
+| Anthropic Messages | `POST /v1/messages` |
+| OpenAI Responses | `POST /v1/responses` |
+| 模型列表 | `GET /v1/models` |
+| 健康检查 | `GET /health` |
+
+优先使用 combo：`combo/max`、`combo/coder`、`combo/fast`、`combo/free`。直连模型使用 `provider/model-id`，例如 `codex/gpt-5.6-terra`。provider 可以配置 `aliases`；模型不使用别名。
+
 Chat Completions 示例：
 
 ```bash
@@ -317,7 +702,7 @@ bun build --compile src/cli.ts --outfile dist/acmos
 ~/.acmos/logs/acmos-YYYY-MM-DD.jsonl
 ```
 
-每个请求日志会带 `reqId`。用它串联“收到请求”“上游响应头已到达”“请求完成”或失败记录：
+每个请求日志会带 `reqId`。用它串联"收到请求""上游响应头已到达""请求完成"或失败记录：
 
 ```bash
 # 终端实时观察服务 stderr
@@ -343,12 +728,15 @@ jq 'select(.level == "warn" or .level == "error")' ~/.acmos/logs/acmos-$(date +%
 
 请求体排障：将 `log.level` 调为 `debug` 并临时设置 `log.captureBody: true`，复现一次后立即关闭。已记录的请求体可能包含用户内容；日志会递归脱敏常见 token/header 字段，但仍应按敏感数据处理。
 
-
 ## 安全边界
 
 - 不提交 `~/.acmos/.env`、`~/.acmos/config.yml`、OAuth 凭据或日志。
 - `config.snapshot.yaml` 已脱敏，仅用于审计。
 - 推荐绑定 `127.0.0.1`；若要监听外网，必须配置强随机 `apiKeys` 并由反向代理提供 TLS 与访问控制。
+
+## 支持
+
+如果 acmos 对你有帮助，欢迎[在爱发电请我喝杯咖啡](https://afdian.com/a/charlzyx)，或关注我的 [Twitter/X @chaogpt](https://twitter.com/chaogpt)。
 
 ---
 
