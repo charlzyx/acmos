@@ -5,7 +5,7 @@ import { logger } from './log/logger.ts';
 import { createServer } from './server.ts';
 
 const NAME = 'acmos';
-const VERSION = '0.1.2';
+const VERSION = '0.1.0';
 
 async function main(): Promise<void> {
   if (process.argv.includes('--version') || process.argv.includes('-v')) {
