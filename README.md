@@ -740,4 +740,4 @@ jq 'select(.level == "warn" or .level == "error")' ~/.acmos/logs/acmos-$(date +%
 
 ---
 
-*Inspired by [9router](https://github.com/ztelliot/9router) and [cliproxyapi](https://github.com/ztelliot/cliproxyapi).*
+*Inspired by [9router](https://github.com/decolua/9router) and [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI).*
