@@ -43,22 +43,21 @@ function cooldownKey(target: ResolvedTarget): string {
 }
 
 /**
- * 同协议候选优先，减少格式转换；同一组内仍保留声明顺序和会话粘性。
- * 没有同协议候选时才回退到其他 wire。
+ * combo 的目标顺序就是 fallback 优先级，严格保持声明顺序。
+ *
+ * 只要会话粘性选中了一个偏好目标，就把它提到队首；其余成员维持声明顺序。
+ * 不再按 wire 协议分组重排 —— 那会把同为异协议的次选整体排到首选之前，
+ * 破坏 combo 的语义（combo/max 声明 codex sol 优先，失败落 opencode，
+ * 但 sol 是 resp、opencode 是 cc，入站 cc 时分组重排会让 opencode 抢跑）。
+ * 格式转换的代价本就由转换层承担，不该反过来改写业务优先级。
  */
 function orderTargets(
   targets: ResolvedTarget[],
-  ingress: WireFormat,
+  _ingress: WireFormat,
   preferred: ResolvedTarget | undefined,
 ): ResolvedTarget[] {
-  const matching = targets.filter((target) => target.wire === ingress);
-  const converted = targets.filter((target) => target.wire !== ingress);
-  const groups = matching.length > 0 ? [matching, converted] : [converted];
-  return groups.flatMap((group) =>
-    preferred && group.includes(preferred)
-      ? [preferred, ...group.filter((target) => target !== preferred)]
-      : group,
-  );
+  if (!preferred || !targets.includes(preferred)) return targets;
+  return [preferred, ...targets.filter((target) => target !== preferred)];
 }
 
 export async function dispatch(options: DispatchOptions): Promise<DispatchResult> {

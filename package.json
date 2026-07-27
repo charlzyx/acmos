@@ -1,6 +1,6 @@
 {
   "name": "acmos",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A pure multi-format AI proxy: OpenAI Chat Completions / Anthropic Messages / OpenAI Responses in and out, with combo virtual providers.",
   "type": "module",
   "private": true,
