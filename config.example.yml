@@ -1,0 +1,139 @@
+# smooth 配置示例
+#
+# 放到 ~/.smooth/config.yml（或用 SMOOTH_CONFIG 指定其它路径）。
+# 由 c12 加载，因此同样支持 config.ts / config.json / config.toml，
+# 以及 `extends: ./other.yml` 分层继承。
+#
+# 密钥不要直接写在这里。写进 ~/.smooth/.env，然后用 "${env:NAME}" 引用。
+# 注意两点：
+#   1. dotenv 语义——shell 里已导出的同名变量优先于 .env
+#   2. 引用写法请**加引号**，否则在 [a, b] 这类流式集合里，
+#      ${env: 里的冒号会被 YAML 当成键值分隔符
+
+host: 127.0.0.1
+port: 20129
+
+# 全局出网代理。provider 需显式写 proxy: true 才会使用。
+proxy: http://127.0.0.1:7890
+
+# 入站鉴权。留空表示不校验（本机自用场景）。
+apiKeys: []
+
+log:
+  level: info
+  file: true
+  # 打开后会把完整的请求 / 响应体写进日志，包含对话原文，仅调试时开。
+  captureBody: false
+  retentionDays: 7
+
+catalog:
+  enabled: true
+  url: https://models.dev/api.json
+  ttlHours: 24
+
+# 图片旁路：combo 收到图片且任一 fallback 不支持视觉时，先用 Luna 生成文本描述。
+# 视觉能力来自 models.dev 的 modalities.input 是否含 image；开启后 combo 会声明 vision=true。
+visionSidecar:
+  enabled: true
+  model: codex/gpt-5.6-luna
+  maxTokens: 1024
+
+# 默认同步每个上游的 `<baseUrl>/models`。上游明确元数据优先于 models.dev；
+# 只返回模型 ID 的目录仅用于确认存在性，不会覆盖 context/vision/tools 等能力字段。
+# 特殊上游可覆盖路径，或关闭：modelDirectory: { enabled: false }
+providers:
+  # --- OpenAI Responses ---------------------------------------------------
+  codex:
+    wire: resp
+    baseUrl: https://chatgpt.com/backend-api/codex
+    catalogProvider: openai
+    proxy: true
+    auth:
+      type: chatgpt-oauth
+      credentialsPath: ~/.codex/auth.json
+    models:
+      - id: gpt-5.6-sol
+      - id: gpt-5.6-terra
+      - id: gpt-5.6-luna
+
+  # --- OpenCode Zen（标准 Chat Completions）--------------------------------
+  opencode:
+    wire: cc
+    baseUrl: https://opencode.ai/zen/v1
+    catalogProvider: opencode
+    # 多把 key 会按 keyStrategy 轮转；这里用数组即可
+    apiKey:
+      - "${env:OPENCODE_KEY_1}"
+    models:
+      - id: glm-5.2
+      - id: deepseek-v4-flash
+
+  # --- DeepSeek 官方 ------------------------------------------------------
+  deepseek:
+    wire: cc
+    baseUrl: https://api.deepseek.com
+    catalogProvider: deepseek
+    apiKey: "${env:DEEPSEEK_API_KEY}"
+    defaults:
+      compat:
+        maxTokensField: max_tokens
+        supportsDeveloperRole: false
+        supportsToolChoice: false
+        # DeepSeek 要求带 tool_calls 的 assistant 消息同时有 content 与 reasoning_content
+        requiresAssistantContentForToolCalls: true
+        requiresReasoningContentForToolCalls: true
+    models:
+      - id: deepseek-v4-pro
+      - id: deepseek-v4-flash
+
+  # --- 火山 Ark：同一账号同时暴露三种协议，是校验转换层保真度的天然对照组 -----
+  ark-am:
+    wire: am
+    baseUrl: https://ark.cn-beijing.volces.com/api/coding/v1
+    auth:
+      type: header
+      header: x-api-key
+      keys: ["${env:ARK_API_KEY}"]
+    models:
+      - id: glm-5.2
+        thinking:
+          mode: budget
+          budgetMap: { minimal: 1024, low: 4096, medium: 16384, high: 32768, xhigh: 49152, max: 65536 }
+
+  ark-oai:
+    wire: cc
+    baseUrl: https://ark.cn-beijing.volces.com/api/coding/v3
+    apiKey: "${env:ARK_API_KEY}"
+    models:
+      - id: glm-5.2
+
+  ark-resp:
+    wire: resp
+    baseUrl: https://ark.cn-beijing.volces.com/api/coding/v3
+    apiKey: "${env:ARK_API_KEY}"
+    models:
+      - id: glm-5.2
+# 仅在 models.dev 缺少该模型/上游时才需要显式覆盖 reasoning、thinking、contextWindow 等元数据。
+
+# combo 是对外暴露的虚拟模型。客户端请求 combo/max，smooth 按顺序 fallback。
+combos:
+  max:
+    description: 最强档，codex sol 优先，失败落 opencode
+    sticky: true
+    members:
+      - { provider: codex, model: gpt-5.6-sol }
+      - { provider: opencode, model: glm-5.2 }
+
+  coder:
+    description: 编码档，codex terra 优先，失败落 opencode
+    sticky: true
+    members:
+      - { provider: codex, model: gpt-5.6-terra }
+      - { provider: opencode, model: glm-5.2 }
+
+  fast:
+    description: 低延迟档，codex luna 优先，失败落 opencode
+    sticky: true
+    members:
+      - { provider: codex, model: gpt-5.6-luna }
+      - { provider: opencode, model: deepseek-v4-flash }
