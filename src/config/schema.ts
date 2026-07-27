@@ -55,7 +55,7 @@ export const compatSchema = z
 export type CompatConfig = z.infer<typeof compatSchema>;
 
 /**
- * thinking 映射。smooth 内部统一用六档 level，这里定义如何投射到具体上游。
+ * thinking 映射。acmos 内部统一用六档 level，这里定义如何投射到具体上游。
  *
  * - `off`：该模型不支持推理，请求里剔除所有 thinking 相关字段
  * - `effort`：映射成字符串档位（OpenAI `reasoning.effort` 风格）
@@ -105,7 +105,7 @@ export type ModelConfig = z.infer<typeof modelSchema>;
  * 鉴权方式。
  * - `bearer`：`Authorization: Bearer <key>`
  * - `header`：自定义头（Anthropic 用 `x-api-key`）
- * - `chatgpt-oauth`：读 `~/.codex/auth.json` 的 ChatGPT token，由 smooth 负责刷新
+ * - `chatgpt-oauth`：读 `~/.codex/auth.json` 的 ChatGPT token，由 acmos 负责刷新
  * - `none`：不带凭据
  */
 export const authSchema = z
@@ -247,7 +247,7 @@ export const configSchema = z
     catalog: catalogSchema.default({}),
     visionSidecar: visionSidecarSchema.default({}),
     providers: z.record(z.string(), providerSchema).default({}),
-    combos: z.record(z.string(), comboSchema).default({}),
+    combo: z.record(z.string(), comboSchema).default({}),
   })
   .strict();
 

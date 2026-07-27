@@ -5,7 +5,7 @@ import { THINKING_LEVELS, type ThinkingLevel } from '../ir/types.ts';
  * 推理强度归一。
  *
  * 各家的档位取值互不相同（OpenAI 是 `minimal/low/medium/high`，Anthropic 是 token
- * 预算，国内几家又各有各的开关），smooth 内部统一成六档，再按每个上游的配置投射回去。
+ * 预算，国内几家又各有各的开关），acmos 内部统一成六档，再按每个上游的配置投射回去。
  */
 
 const LEVEL_INDEX = new Map<ThinkingLevel, number>(

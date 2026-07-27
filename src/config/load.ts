@@ -100,19 +100,19 @@ function normalizeAuth(providerId: string, provider: Config['providers'][string]
 function validateReferences(config: Config): void {
   const problems: string[] = [];
 
-  for (const [comboId, combo] of Object.entries(config.combos)) {
+  for (const [comboId, combo] of Object.entries(config.combo)) {
     if (!combo) continue;
     for (const [i, member] of combo.members.entries()) {
       const provider = config.providers[member.provider];
       if (!provider) {
         problems.push(
-          `combos.${comboId}.members[${i}] 引用了不存在的 provider "${member.provider}"`,
+          `combo.${comboId}.members[${i}] 引用了不存在的 provider "${member.provider}"`,
         );
         continue;
       }
       if (!provider.enabled) {
         problems.push(
-          `combos.${comboId}.members[${i}] 引用了已禁用的 provider "${member.provider}"`,
+          `combo.${comboId}.members[${i}] 引用了已禁用的 provider "${member.provider}"`,
         );
       }
       if (
@@ -120,7 +120,7 @@ function validateReferences(config: Config): void {
         !provider.models.some((model) => model.id === member.model)
       ) {
         problems.push(
-          `combos.${comboId}.members[${i}] 引用了 provider "${member.provider}" 中未声明的模型 "${member.model}"`,
+          `combo.${comboId}.members[${i}] 引用了 provider "${member.provider}" 中未声明的模型 "${member.model}"`,
         );
       }
     }
@@ -156,7 +156,7 @@ function validateReferences(config: Config): void {
     }
   }
 
-  const comboIds = new Set(Object.keys(config.combos));
+  const comboIds = new Set(Object.keys(config.combo));
   for (const providerId of Object.keys(config.providers)) {
     if (comboIds.has(providerId)) {
       problems.push(`"${providerId}" 同时是 provider 和 combo，路由会歧义`);

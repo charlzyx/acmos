@@ -7,7 +7,7 @@ import type { Logger } from '../../log/logger.ts';
 /**
  * ChatGPT OAuth 鉴权。
  *
- * 复用 `~/.codex/auth.json` 的 token，smooth 只负责 refresh。
+ * 复用 `~/.codex/auth.json` 的 token，acmos 只负责 refresh。
  * Codex CLI 用 device-code 流程登录，把 token 落在 auth.json，我们直接读。
  * token 过期（或临近过期）时用 refresh_token 换新的 access_token，写回文件。
  *
@@ -177,7 +177,7 @@ export async function getChatGptToken(options: GetTokenOptions): Promise<ChatGpt
   }
 
   if (file.auth_mode && file.auth_mode !== 'chatgpt') {
-    throw new Error(`auth.json 的 auth_mode=${file.auth_mode}，smooth 只支持 chatgpt 模式`);
+    throw new Error(`auth.json 的 auth_mode=${file.auth_mode}，acmos 只支持 chatgpt 模式`);
   }
 
   if (!file.tokens?.access_token) {

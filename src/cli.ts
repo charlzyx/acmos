@@ -42,7 +42,7 @@ async function main(): Promise<void> {
     idleTimeout: 0,
     fetch: app.fetch,
   });
-  logger.info('smooth 已启动', {
+  logger.info('acmos 已启动', {
     url: `http://${config.host}:${config.port}`,
     config: context.loaded.sourcePath,
     layers: context.loaded.layers.length,

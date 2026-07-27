@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "smooth",
+      "name": "acmos",
       "dependencies": {
         "c12": "3.3.4",
         "hono": "^4.6.14",

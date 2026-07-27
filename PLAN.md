@@ -13,21 +13,21 @@
 | 产物 | 可运行 HTTP 服务，单进程 |
 | 运行时 | Bun + TypeScript + Hono |
 | 上游客户端 | 裸 `fetch` + 自写 SSE 解析，**不引入 AI SDK 到数据通路** |
-| codex 鉴权 | 复用 `~/.codex/auth.json` 的 token，smooth 只负责 refresh；直连 chatgpt.com backend-api，走 HTTP 代理出网 |
+| codex 鉴权 | 复用 `~/.codex/auth.json` 的 token，acmos 只负责 refresh；直连 chatgpt.com backend-api，走 HTTP 代理出网 |
 | combo 语义 | 顺序 fallback + 会话粘性 |
 | 流中途切换 | 只在首字节吹出前切；写中断续传列入后续 |
 | 入站端点 | `/v1/chat/completions`、`/v1/messages`、`/v1/messages/count_tokens`、`/v1/responses`、`GET /v1/models` |
-| 与 9router | 并存，smooth 占新端口逐步迁移 |
+| 与 9router | 并存，acmos 占新端口逐步迁移 |
 | 配置 | 全部写文件；由 **c12** 加载（YAML/TS/JSON、`extends` 分层、dotenv、热重载），**zod** 只管校验。DB 只存运行时状态 |
 | thinking | 内部六档 level（`minimal/low/medium/high/xhigh/max`），每上游配 map |
 | 识图 | 自动旁路：含图且目标不支持 vision → 先调 vision 模型转文字描述再内联 |
-| 可观测性 | 只做 log：结构化 JSONL 落 `~/.smooth/logs/`，可选原始 body 抓取用于排查转换 bug |
-| 部署默认值 | 端口 `20129`，配置 `~/.smooth/config.yml`，DB `~/.smooth/state.db`，代理 `http://127.0.0.1:7890` |
+| 可观测性 | 只做 log：结构化 JSONL 落 `~/.acmos/logs/`，可选原始 body 抓取用于排查转换 bug |
+| 部署默认值 | 端口 `20129`，配置 `~/.acmos/config.yml`，DB `~/.acmos/state.db`，代理 `http://127.0.0.1:7890` |
 
 ### 关键架构决策：中立超集 IR
 
 不像 9router 那样拿 OpenAI Chat Completions 当中枢格式（`source → OpenAI → target` 两跳会丢字段）。
-smooth 定义**中立超集 IR**，每个 thinking / reasoning block 携带 provenance（`origin` + `raw`）：
+acmos 定义**中立超集 IR**，每个 thinking / reasoning block 携带 provenance（`origin` + `raw`）：
 
 - 目标格式 === 来源格式 → **逐字节回放原始 JSON**
 - 目标格式 ≠ 来源格式 → 按规则降级
@@ -54,7 +54,7 @@ SSE 流 tee 一份嗅探 usage，**不做反序列化重编码**。
 | `ark-oai` | chat-completions + responses | `https://ark.cn-beijing.volces.com/api/coding/v3` | Bearer | 同账号双协议 |
 | `deepseek` | chat-completions | `https://api.deepseek.com` | Bearer | quirks 见 `~/.omp/agent/models.yml` 的 `deepseek.compat` |
 
-密钥一律走 `~/.smooth/.env` + 配置里 `${env:XXX}` 引用，不进仓库。
+密钥一律走 `~/.acmos/.env` + 配置里 `${env:XXX}` 引用，不进仓库。
 
 **Ark 是保真度靶场**：同一个 `glm-5.2` 同时暴露 anthropic / chat-completions / responses 三种协议，
 用同一 prompt 分三条路走一遍，输出对不上就说明转换层在丢字段。
@@ -181,7 +181,7 @@ tests/
 
 ## 7. 参考
 
-`9router/` 是只读参考实现（MIT）。smooth 不复制其代码，只借鉴逻辑：
+`9router/` 是只读参考实现（MIT）。acmos 不复制其代码，只借鉴逻辑：
 
 - `9router/open-sse/translator/index.js` —— 流式状态机字段清单
 - `9router/open-sse/translator/response/claude-to-openai.js`、`openai-to-claude.js`

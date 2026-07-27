@@ -220,7 +220,7 @@ export function translateResponsesSseToCc(upstream: ReadableStream<Uint8Array>):
   const state = newState();
   const encoder = new TextEncoder();
 
-  // 复用 smooth 的 SSE 解析器逐事件读
+  // 复用 acmos 的 SSE 解析器逐事件读
   // 注意：parseSseStream 是 async generator，这里用 ReadableStream 包一层。
   return new ReadableStream<Uint8Array>({
     async start(controller) {

@@ -173,7 +173,7 @@ export class Registry {
       }
     }
 
-    for (const [comboId, combo] of Object.entries(config.combos)) {
+    for (const [comboId, combo] of Object.entries(config.combo)) {
       if (combo) this.combos.set(comboId, combo);
     }
   }

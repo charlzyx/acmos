@@ -187,7 +187,7 @@ combo 先按入站 wire 分组：`cc`、`am`、`resp` 请求优先尝试同协�
 因此，为同一服务配置多种 wire 时，应把它们都写入同一个 combo：
 
 ```yaml
-combos:
+combo:
   coder:
     sticky: true
     members:

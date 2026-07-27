@@ -208,7 +208,7 @@ export function createServer(getContext: () => AppContext): Hono {
       config: loaded.sourcePath,
       catalog: catalog.source,
       providers: Object.keys(loaded.config.providers).length,
-      combos: Object.keys(loaded.config.combos).length,
+      combo: Object.keys(loaded.config.combo).length,
     });
   });
   app.get('/v1/models', (c) => {
@@ -299,9 +299,9 @@ export function createServer(getContext: () => AppContext): Hono {
 
       const { target, response, attempt } = result;
       const headers: Record<string, string> = {
-        'x-smooth-request-id': reqId,
-        'x-smooth-provider': target.providerId,
-        'x-smooth-model': target.modelId,
+        'x-acmos-request-id': reqId,
+        'x-acmos-provider': target.providerId,
+        'x-acmos-model': target.modelId,
       };
 
       const recordUsage = (usage: unknown, status: 'ok' | 'error'): void => {
@@ -441,7 +441,7 @@ export function createServer(getContext: () => AppContext): Hono {
       return jsonResponse(
         errorBody(error.kind, error.message),
         STATUS_BY_KIND[error.kind] ?? 500,
-        { 'x-smooth-request-id': reqId },
+        { 'x-acmos-request-id': reqId },
       );
     }
   });
@@ -527,9 +527,9 @@ export function createServer(getContext: () => AppContext): Hono {
 
       const { target, response, attempt } = result;
       const headers: Record<string, string> = {
-        'x-smooth-request-id': reqId,
-        'x-smooth-provider': target.providerId,
-        'x-smooth-model': target.modelId,
+        'x-acmos-request-id': reqId,
+        'x-acmos-provider': target.providerId,
+        'x-acmos-model': target.modelId,
       };
 
       const recordUsage = (usage: unknown, status: 'ok' | 'error'): void => {
@@ -648,7 +648,7 @@ export function createServer(getContext: () => AppContext): Hono {
       return jsonResponse(
         errorBody(error.kind, error.message),
         STATUS_BY_KIND[error.kind] ?? 500,
-        { 'x-smooth-request-id': reqId },
+        { 'x-acmos-request-id': reqId },
       );
     }
   });
@@ -684,7 +684,7 @@ export function createServer(getContext: () => AppContext): Hono {
           'cache-control': 'no-cache',
           connection: 'keep-alive',
           ...Object.fromEntries(
-            [...ccResponse.headers].filter(([name]) => name.startsWith('x-smooth-')),
+            [...ccResponse.headers].filter(([name]) => name.startsWith('x-acmos-')),
           ),
         },
       });
@@ -692,7 +692,7 @@ export function createServer(getContext: () => AppContext): Hono {
     return jsonResponse(
       ccJsonToResponsesResponse((await ccResponse.json()) as Record<string, unknown>),
       200,
-      Object.fromEntries([...ccResponse.headers].filter(([name]) => name.startsWith('x-smooth-'))),
+      Object.fromEntries([...ccResponse.headers].filter(([name]) => name.startsWith('x-acmos-'))),
     );
   });
 

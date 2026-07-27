@@ -1,10 +1,10 @@
-# smooth 配置示例
+# acmos 配置示例
 #
-# 放到 ~/.smooth/config.yml（或用 SMOOTH_CONFIG 指定其它路径）。
+# 放到 ~/.acmos/config.yml（或用 ACMOS_CONFIG 指定其它路径）。
 # 由 c12 加载，因此同样支持 config.ts / config.json / config.toml，
 # 以及 `extends: ./other.yml` 分层继承。
 #
-# 密钥不要直接写在这里。写进 ~/.smooth/.env，然后用 "${env:NAME}" 引用。
+# 密钥不要直接写在这里。写进 ~/.acmos/.env，然后用 "${env:NAME}" 引用。
 # 注意两点：
 #   1. dotenv 语义——shell 里已导出的同名变量优先于 .env
 #   2. 引用写法请**加引号**，否则在 [a, b] 这类流式集合里，
@@ -115,8 +115,8 @@ providers:
       - id: glm-5.2
 # 仅在 models.dev 缺少该模型/上游时才需要显式覆盖 reasoning、thinking、contextWindow 等元数据。
 
-# combo 是对外暴露的虚拟模型。客户端请求 combo/max，smooth 按顺序 fallback。
-combos:
+# combo 是对外暴露的虚拟模型。客户端请求 combo/max，acmos 按顺序 fallback。
+combo:
   max:
     description: 最强档，codex sol 优先，失败落 opencode
     sticky: true

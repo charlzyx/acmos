@@ -74,13 +74,13 @@ export function writeConfigSnapshot(options: {
     });
   }
 
-  const combos: Record<string, unknown> = {};
-  for (const [comboId, combo] of Object.entries(loaded.config.combos)) {
-    if (!combo) continue;
+  const combo: Record<string, unknown> = {};
+  for (const [comboId, comboCfg] of Object.entries(loaded.config.combo)) {
+    if (!comboCfg) continue;
     const route = registry.resolve(`combo/${comboId}`);
-    combos[`combo/${comboId}`] = {
-      description: combo.description ?? null,
-      sticky: combo.sticky,
+    combo[`combo/${comboId}`] = {
+      description: comboCfg.description ?? null,
+      sticky: comboCfg.sticky,
       members: (route?.targets ?? []).map((target) => ({
         provider: target.providerId,
         model: target.modelId,
@@ -101,7 +101,7 @@ export function writeConfigSnapshot(options: {
     },
     userConfig: redact(loaded.config),
     resolvedModels,
-    combos,
+    combo,
   };
   const path = configSnapshotPath();
   writeFileSync(path, Bun.YAML.stringify(document, null, 2), 'utf8');

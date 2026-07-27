@@ -1,5 +1,5 @@
 /**
- * smooth 的中立超集 IR（Intermediate Representation）。
+ * acmos 的中立超集 IR（Intermediate Representation）。
  *
  * 设计原则：
  *

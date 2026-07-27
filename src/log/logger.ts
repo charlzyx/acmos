@@ -164,7 +164,7 @@ export class Logger {
     const day = dayStamp(at);
     if (day !== this.currentDay) {
       this.currentDay = day;
-      this.currentFile = join(this.dir, `smooth-${day}.jsonl`);
+      this.currentFile = join(this.dir, `acmos-${day}.jsonl`);
       this.pruneOldFiles();
     }
     try {
@@ -183,7 +183,7 @@ export class Logger {
       return;
     }
     for (const name of entries) {
-      if (!name.startsWith('smooth-') || !name.endsWith('.jsonl')) continue;
+      if (!name.startsWith('acmos-') || !name.endsWith('.jsonl')) continue;
       const path = join(this.dir, name);
       try {
         if (statSync(path).mtimeMs < cutoff) rmSync(path, { force: true });

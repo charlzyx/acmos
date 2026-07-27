@@ -17,14 +17,14 @@ providers:
     wire: cc
     baseUrl: https://api.deepseek.com
     apiKey: sk-test
-combos:
+combo:
   fast:
     members:
       - { provider: deepseek, model: deepseek-chat }
 `;
 
 beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), 'smooth-cfg-'));
+  home = mkdtempSync(join(tmpdir(), 'acmos-cfg-'));
   process.env.ACMOS_HOME = home;
   process.env.ACMOS_CONFIG = undefined;
   delete process.env.ACMOS_CONFIG;
@@ -45,7 +45,7 @@ describe('loadAcmosConfig', () => {
     expect(config.host).toBe('127.0.0.1');
     expect(config.log.captureBody).toBe(false);
     expect(config.catalog.url).toBe('https://models.dev/api.json');
-    expect(config.combos.fast?.sticky).toBe(true);
+    expect(config.combo.fast?.sticky).toBe(true);
   });
 
   test('apiKey 简写归一成 bearer auth', async () => {
@@ -134,7 +134,7 @@ providers:
       'config.yml',
       `
 providers: {}
-combos:
+combo:
   fast:
     members:
       - { provider: ghost, model: whatever }
@@ -151,7 +151,7 @@ providers:
   fast:
     wire: cc
     baseUrl: https://api.deepseek.com
-combos:
+combo:
   fast:
     members:
       - { provider: fast, model: x }
@@ -228,6 +228,6 @@ providers:
     expect(config.providers.codex?.wire).toBe('resp');
     expect(auth.codex?.type).toBe('chatgpt-oauth');
     expect(auth['ark-am']?.header).toBe('x-api-key');
-    expect(Object.keys(config.combos).sort()).toEqual(['coder', 'fast', 'max']);
+    expect(Object.keys(config.combo).sort()).toEqual(['coder', 'fast', 'max']);
   });
 });

@@ -72,7 +72,7 @@ export interface ModelMeta {
 }
 
 /**
- * 把 models.dev 的 reasoning_options.values 映射成 smooth 六档 effortMap。
+ * 把 models.dev 的 reasoning_options.values 映射成 acmos 六档 effortMap。
  *
  * 优先向下匹配，若请求档位低于模型最小能力则提升至最低支持档位；绝不生成 catalog
  * 未声明的上游值。例：仅支持 high/max 的模型收到 medium 时发送 high。
