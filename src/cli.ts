@@ -4,8 +4,25 @@ import { ConfigError, watchAcmosConfig } from './config/load.ts';
 import { logger } from './log/logger.ts';
 import { createServer } from './server.ts';
 
+const NAME = 'acmos';
+const VERSION = '0.1.0';
+
 async function main(): Promise<void> {
-  let context: AppContext;
+  if (process.argv.includes('--version') || process.argv.includes('-v')) {
+    process.stdout.write(`${VERSION}\n`);
+    process.exit(0);
+  }
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    process.stdout.write(`${NAME} ${VERSION}` +
+      '\n用法: acmos [选项]' +
+      '\n  -v, --version  输出版本' +
+      '\n  -h, --help     显示帮助' +
+      '\n' +
+      '\n环境变量:' +
+      '\n  ACMOS_HOME     数据目录 (默认 ~/.acmos)' +
+      '\n  ACMOS_CONFIG   配置文件路径\n');
+    process.exit(0);
+  }
 
   try {
     const watcher = await watchAcmosConfig({
