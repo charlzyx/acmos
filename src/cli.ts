@@ -23,6 +23,7 @@ async function main(): Promise<void> {
       '\n  ACMOS_CONFIG   配置文件路径\n');
     process.exit(0);
   }
+  let context: AppContext;
 
   try {
     const watcher = await watchAcmosConfig({
