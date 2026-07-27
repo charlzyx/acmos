@@ -2,7 +2,6 @@
 
 acmos — 交流电般丝滑切换的多协议 AI 代理。对下游提供 OpenAI Chat Completions、Anthropic Messages 和 OpenAI Responses；对上游可按 provider 使用 `cc`、`am` 或 `resp` 协议。`combo/*` 是按顺序 fallback 的虚拟模型。
 
-*Inspired by [9router](https://github.com/ztelliot/9router) and [cliproxyapi](https://github.com/ztelliot/cliproxyapi).*
 
 ## 能力
 
@@ -312,3 +311,7 @@ jq 'select(.level == "warn" or .level == "error")' ~/.acmos/logs/acmos-$(date +%
 - 不提交 `~/.acmos/.env`、`~/.acmos/config.yml`、OAuth 凭据或日志。
 - `config.snapshot.yaml` 已脱敏，仅用于审计。
 - 推荐绑定 `127.0.0.1`；若要监听外网，必须配置强随机 `apiKeys` 并由反向代理提供 TLS 与访问控制。
+
+---
+
+*Inspired by [9router](https://github.com/ztelliot/9router) and [cliproxyapi](https://github.com/ztelliot/cliproxyapi).*
