@@ -1,7 +1,13 @@
 import type { WireFormat } from '../ir/types.ts';
 import type { Logger } from '../log/logger.ts';
 import type { Store } from '../state/store.ts';
-import { UpstreamError, callUpstream, isFailoverable, pickKey } from '../upstream/client.ts';
+import {
+  callUpstream,
+  isFailoverable,
+  pickKey,
+  UpstreamCompatibilityError,
+  UpstreamError,
+} from '../upstream/client.ts';
 import type { ResolvedTarget, Route } from './registry.ts';
 
 /**
@@ -117,7 +123,11 @@ export async function dispatch(options: DispatchOptions): Promise<DispatchResult
             err instanceof UpstreamError
               ? err
               : new UpstreamError({ kind: 'internal', message: String(err), raw: err });
-          if (error.kind === 'canceled' || !isFailoverable(error.kind) || keyAttempt === keyAttempts - 1) {
+          if (
+            error.kind === 'canceled' ||
+            !isFailoverable(error.kind) ||
+            keyAttempt === keyAttempts - 1
+          ) {
             throw error;
           }
           logger.warn('同一上游的 API key 失败，尝试下一把 key', {
@@ -130,7 +140,10 @@ export async function dispatch(options: DispatchOptions): Promise<DispatchResult
         }
       }
       if (!response) {
-        throw new UpstreamError({ kind: 'internal', message: `上游 ${target.providerId} 未返回响应` });
+        throw new UpstreamError({
+          kind: 'internal',
+          message: `上游 ${target.providerId} 未返回响应`,
+        });
       }
 
       if (attempt > 0 || skipped.length > 0) {
@@ -166,14 +179,27 @@ export async function dispatch(options: DispatchOptions): Promise<DispatchResult
       lastError = error;
       attempt++;
 
-      if (!isFailoverable(error.kind)) {
-        logger.warn('上游返回不可重试的错误，直接透传给客户端', {
+      if (
+        !isFailoverable(error.kind) &&
+        !(route.combo && error instanceof UpstreamCompatibilityError)
+      ) {
+        logger.warn('直连上游返回不可重试的错误，直接透传给客户端', {
           provider: target.providerId,
           model: target.modelId,
           kind: error.kind,
           status: error.httpStatus,
         });
         throw error;
+      }
+
+      if (!isFailoverable(error.kind)) {
+        logger.warn('combo 成员不兼容当前请求，尝试下一个成员', {
+          provider: target.providerId,
+          model: target.modelId,
+          kind: error.kind,
+          status: error.httpStatus,
+        });
+        continue;
       }
 
       const cooldownMs = error.retryAfterMs ?? route.comboConfig?.cooldownMs ?? 60_000;

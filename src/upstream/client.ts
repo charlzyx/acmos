@@ -31,6 +31,12 @@ export class UpstreamError extends Error {
     this.raw = init.raw;
   }
 }
+export class UpstreamCompatibilityError extends UpstreamError {
+  constructor(message: string) {
+    super({ kind: 'badRequest', message });
+    this.name = 'UpstreamCompatibilityError';
+  }
+}
 
 /** HTTP 状态码 → 错误分类。路由层据此决定「换一个上游」还是「直接把错误还给客户端」。 */
 function classifyStatus(status: number): IRError['kind'] {
@@ -81,12 +87,19 @@ function joinUrl(baseUrl: string, path: string): string {
  */
 const keyCursors = new Map<string, number>();
 
-export function pickKey(target: ResolvedTarget, fixedIndex?: number): { key: string; index: number } | undefined {
+export function pickKey(
+  target: ResolvedTarget,
+  fixedIndex?: number,
+): { key: string; index: number } | undefined {
   const { keys, keyStrategy } = target.auth;
   if (keys.length === 0) return undefined;
 
   let index = fixedIndex ?? 0;
-  if (fixedIndex === undefined && (keyStrategy === 'round-robin' || keyStrategy === 'failover') && keys.length > 1) {
+  if (
+    fixedIndex === undefined &&
+    (keyStrategy === 'round-robin' || keyStrategy === 'failover') &&
+    keys.length > 1
+  ) {
     const cursor = keyCursors.get(target.providerId) ?? 0;
     index = cursor % keys.length;
     keyCursors.set(target.providerId, cursor + 1);
@@ -95,7 +108,10 @@ export function pickKey(target: ResolvedTarget, fixedIndex?: number): { key: str
   return key ? { key, index } : undefined;
 }
 
-export function resolveProxy(target: ResolvedTarget, globalProxy: string | undefined): string | undefined {
+export function resolveProxy(
+  target: ResolvedTarget,
+  globalProxy: string | undefined,
+): string | undefined {
   const setting = target.provider.proxy;
   if (setting === undefined || setting === false) return undefined;
   if (setting === true) return globalProxy;
@@ -183,7 +199,8 @@ export interface UpstreamCallOptions {
   keyIndex?: number | undefined;
 }
 export async function callUpstream(options: UpstreamCallOptions): Promise<Response> {
-  const { target, path, body, signal, globalProxy, logger, extraHeaders, sessionId, keyIndex } = options;
+  const { target, path, body, signal, globalProxy, logger, extraHeaders, sessionId, keyIndex } =
+    options;
   const url = joinUrl(target.provider.baseUrl, path);
   const proxy = resolveProxy(target, globalProxy);
   const timeout = AbortSignal.timeout(target.provider.timeoutMs);
@@ -196,7 +213,12 @@ export async function callUpstream(options: UpstreamCallOptions): Promise<Respon
   const started = Date.now();
   let response: Response;
   try {
-    const headers = await buildHeaders(target, extraHeaders ?? {}, { proxy, logger, sessionId, keyIndex });
+    const headers = await buildHeaders(target, extraHeaders ?? {}, {
+      proxy,
+      logger,
+      sessionId,
+      keyIndex,
+    });
     response = await fetch(url, {
       method: 'POST',
       headers,

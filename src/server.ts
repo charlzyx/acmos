@@ -4,20 +4,21 @@ import type { AppContext } from './app.ts';
 import type { WireFormat } from './ir/types.ts';
 import { dispatch } from './routing/dispatch.ts';
 import type { ResolvedTarget } from './routing/registry.ts';
-import { parseSseStream, sniffSseStream } from './upstream/sse.ts';
 import { UpstreamError } from './upstream/client.ts';
-import { type CcRequestBody, buildCcRequest, extractCcUsage } from './wire/cc/request.ts';
-import { buildResponsesRequest, buildResponsesToCcRequest } from './wire/resp/request.ts';
-import { ccJsonToResponsesResponse, translateCcSseToResponses } from './wire/resp/encode.ts';
-import { translateResponsesSseToCc } from './wire/resp/decode.ts';
-import {
-  type AmRequestBody,
-  buildAmToCcRequest,
-  buildCcToAmRequest,
-} from './wire/am/request.ts';
-import { amJsonToCcResponse, translateAmSseToCc } from './wire/am/encode.ts';
-import { ccJsonToAmResponse, translateCcSseToAm } from './wire/am/decode.ts';
+import { parseSseStream, sniffSseStream } from './upstream/sse.ts';
 import { maybeUseVisionSidecar } from './vision/sidecar.ts';
+import { ccJsonToAmResponse, translateCcSseToAm } from './wire/am/decode.ts';
+import { amJsonToCcResponse, translateAmSseToCc } from './wire/am/encode.ts';
+import { type AmRequestBody, buildAmToCcRequest, buildCcToAmRequest } from './wire/am/request.ts';
+import {
+  assertCcRequestCompatible,
+  buildCcRequest,
+  type CcRequestBody,
+  extractCcUsage,
+} from './wire/cc/request.ts';
+import { translateResponsesSseToCc } from './wire/resp/decode.ts';
+import { ccJsonToResponsesResponse, translateCcSseToResponses } from './wire/resp/encode.ts';
+import { buildResponsesRequest, buildResponsesToCcRequest } from './wire/resp/request.ts';
 
 /** UpstreamError 分类 → 返回给客户端的 HTTP 状态。 */
 const STATUS_BY_KIND: Record<string, number> = {
@@ -108,7 +109,8 @@ async function collectCcSse(stream: ReadableStream<Uint8Array>): Promise<Record<
     if (!delta || typeof delta !== 'object') continue;
     const deltaRecord = delta as Record<string, unknown>;
     if (typeof deltaRecord.content === 'string') content += deltaRecord.content;
-    if (typeof deltaRecord.reasoning_content === 'string') reasoningContent += deltaRecord.reasoning_content;
+    if (typeof deltaRecord.reasoning_content === 'string')
+      reasoningContent += deltaRecord.reasoning_content;
     if (typeof deltaRecord.reasoning_encrypted_content === 'string') {
       reasoningEncryptedContent = deltaRecord.reasoning_encrypted_content;
     }
@@ -276,8 +278,13 @@ export function createServer(getContext: () => AppContext): Hono {
         sessionKey: sessionKeyOf(body),
         sessionId: reqId,
         resolvePath: (target: ResolvedTarget) =>
-          target.wire === 'resp' ? '/responses' : target.wire === 'am' ? '/messages' : '/chat/completions',
+          target.wire === 'resp'
+            ? '/responses'
+            : target.wire === 'am'
+              ? '/messages'
+              : '/chat/completions',
         buildBody: async (target: ResolvedTarget) => {
+          assertCcRequestCompatible(body, target);
           const messages = await applyVisionSidecar(
             ctx,
             target,
@@ -438,11 +445,9 @@ export function createServer(getContext: () => AppContext): Hono {
         message: error.message,
         latencyMs: Date.now() - started,
       });
-      return jsonResponse(
-        errorBody(error.kind, error.message),
-        STATUS_BY_KIND[error.kind] ?? 500,
-        { 'x-acmos-request-id': reqId },
-      );
+      return jsonResponse(errorBody(error.kind, error.message), STATUS_BY_KIND[error.kind] ?? 500, {
+        'x-acmos-request-id': reqId,
+      });
     }
   });
 
@@ -489,10 +494,15 @@ export function createServer(getContext: () => AppContext): Hono {
         sessionKey: undefined,
         sessionId: reqId,
         resolvePath: (target: ResolvedTarget) =>
-          target.wire === 'resp' ? '/responses' : target.wire === 'am' ? '/messages' : '/chat/completions',
+          target.wire === 'resp'
+            ? '/responses'
+            : target.wire === 'am'
+              ? '/messages'
+              : '/chat/completions',
         buildBody: async (target: ResolvedTarget) => {
+          const source = buildAmToCcRequest(body, target);
+          assertCcRequestCompatible(source, target);
           if (target.wire === 'am') {
-            const source = buildAmToCcRequest(body, target);
             const messages = await applyVisionSidecar(
               ctx,
               target,
@@ -507,7 +517,6 @@ export function createServer(getContext: () => AppContext): Hono {
             log.trace('上游请求体', built, { provider: target.providerId, wire: target.wire });
             return built;
           }
-          const source = buildAmToCcRequest(body, target);
           const messages = await applyVisionSidecar(
             ctx,
             target,
@@ -517,9 +526,7 @@ export function createServer(getContext: () => AppContext): Hono {
           );
           const ccBody = { ...source, messages };
           const built =
-            target.wire === 'resp'
-              ? buildResponsesRequest(ccBody, target, reqId)
-              : ccBody;
+            target.wire === 'resp' ? buildResponsesRequest(ccBody, target, reqId) : ccBody;
           log.trace('上游请求体', built, { provider: target.providerId, wire: target.wire });
           return built;
         },
@@ -645,11 +652,9 @@ export function createServer(getContext: () => AppContext): Hono {
         message: error.message,
         latencyMs: Date.now() - started,
       });
-      return jsonResponse(
-        errorBody(error.kind, error.message),
-        STATUS_BY_KIND[error.kind] ?? 500,
-        { 'x-acmos-request-id': reqId },
-      );
+      return jsonResponse(errorBody(error.kind, error.message), STATUS_BY_KIND[error.kind] ?? 500, {
+        'x-acmos-request-id': reqId,
+      });
     }
   });
 

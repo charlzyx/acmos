@@ -1,5 +1,6 @@
 import type { ResolvedTarget } from '../../routing/registry.ts';
 import { parseLevel, projectThinking } from '../../routing/thinking.ts';
+import { UpstreamCompatibilityError } from '../../upstream/client.ts';
 
 /**
  * Chat Completions 请求改写（快路径）。
@@ -79,11 +80,33 @@ function padToolCallMessages(messages: CcMessage[], target: ResolvedTarget): CcM
     if (needContent && (patched.content === undefined || patched.content === null)) {
       patched.content = '';
     }
-    if (needReasoning && (patched.reasoning_content === undefined || patched.reasoning_content === null)) {
+    if (
+      needReasoning &&
+      (patched.reasoning_content === undefined || patched.reasoning_content === null)
+    ) {
       patched.reasoning_content = '';
     }
     return patched;
   });
+}
+
+function hasForcedToolChoice(choice: unknown): boolean {
+  return (
+    choice === 'required' ||
+    (typeof choice === 'object' && choice !== null && !Array.isArray(choice))
+  );
+}
+
+/**
+ * 成员级兼容门禁。OMP 能在客户端侧读取同名 compat；Pi、Claude Code、Codex
+ * 不一定具备该能力，所以代理必须独立执行，且不能把强制约束静默降级为 auto。
+ */
+export function assertCcRequestCompatible(body: CcRequestBody, target: ResolvedTarget): void {
+  if (target.compat.supportsForcedToolChoice !== false || !hasForcedToolChoice(body.tool_choice))
+    return;
+  throw new UpstreamCompatibilityError(
+    `上游 ${target.providerId}/${target.modelId} 不支持强制工具选择`,
+  );
 }
 
 export function buildCcRequest(body: CcRequestBody, target: ResolvedTarget): CcRequestBody {
@@ -99,9 +122,11 @@ export function buildCcRequest(body: CcRequestBody, target: ResolvedTarget): CcR
     out[compat.maxTokensField ?? 'max_tokens'] = maxTokens;
   }
 
-  const rawReasoning = typeof body.reasoning_effort === 'string' ? body.reasoning_effort.trim().toLowerCase() : undefined;
-  const requestedLevel =
-    parseLevel(target.thinkingLevel) ?? parseLevel(rawReasoning) ?? undefined;
+  const rawReasoning =
+    typeof body.reasoning_effort === 'string'
+      ? body.reasoning_effort.trim().toLowerCase()
+      : undefined;
+  const requestedLevel = parseLevel(target.thinkingLevel) ?? parseLevel(rawReasoning) ?? undefined;
   const projection =
     rawReasoning === 'none' || rawReasoning === 'off'
       ? { disabled: true }

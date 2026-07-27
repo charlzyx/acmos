@@ -30,6 +30,12 @@ export const compatSchema = z
     supportsSystemRole: z.boolean().optional(),
     /** 不支持 `tool_choice` 时整个字段剔除。 */
     supportsToolChoice: z.boolean().optional(),
+    /**
+     * 支持 `tool_choice: auto`，但拒绝 required / 指定函数时设为 false。
+     * OMP/Pi 可据此避免发出无效请求；Claude Code/Codex 等不读取该配置，
+     * 因此代理仍会在成员级校验并让 combo 跳过不兼容目标。
+     */
+    supportsForcedToolChoice: z.boolean().optional(),
     /** 不支持 `parallel_tool_calls` 时剔除。 */
     supportsParallelToolCalls: z.boolean().optional(),
     /** 不支持 `reasoning_effort` 时剔除，改用 extraBody 表达。 */
@@ -193,7 +199,11 @@ export const comboSchema = z
     /** 会话粘性：同一会话优先复用上次成功的成员。 */
     sticky: z.boolean().default(true),
     /** 粘性有效期。 */
-    stickyTtlMs: z.number().int().positive().default(30 * 60_000),
+    stickyTtlMs: z
+      .number()
+      .int()
+      .positive()
+      .default(30 * 60_000),
     /** 成员失败后的冷却时长，冷却期内跳过。 */
     cooldownMs: z.number().int().positive().default(60_000),
   })
