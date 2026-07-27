@@ -11,17 +11,21 @@ acmos — 交流电般丝滑切换的多协议 AI 代理。对下游提供 OpenA
 - ChatGPT Codex OAuth 凭据复用与刷新：读取官方 `~/.codex/auth.json`。
 - 配置热重载、脱敏 JSONL 日志和运行时配置快照。
 
-## 快速开始
-
-前置条件：Bun >= 1.2。
+## 安装
 
 ```bash
-bun install
+brew tap charlzyx/acmos https://github.com/charlzyx/acmos
+brew install acmos
+```
+
+准备配置：
+
+```bash
 mkdir -p ~/.acmos
 cp config.example.yml ~/.acmos/config.yml
 ```
 
-将密钥写到 `~/.acmos/.env`，不要写进配置文件：
+把密钥写入 `~/.acmos/.env`：
 
 ```dotenv
 DEEPSEEK_API_KEY=...
@@ -31,21 +35,26 @@ ARK_API_KEY=...
 
 配置中通过 `${env:NAME}` 引用环境变量。shell 已导出的同名变量优先于 `.env`。
 
-启动服务：
-
-```bash
-bun run start
-# 开发时自动重启
-bun run dev
-```
-
-默认监听 `http://127.0.0.1:20129`。配置路径优先级：
+配置路径优先级：
 
 - `ACMOS_CONFIG=/absolute/path/config.yml`：指定配置文件。
 - `ACMOS_HOME=/absolute/path`：指定数据目录；默认 `~/.acmos`。
 
+启动服务：
 
-健康检查：
+```bash
+brew services start acmos
+```
+
+| 命令 | 作用 |
+|---|---|
+| `brew services start acmos` | 启动并设为开机自启 |
+| `brew services stop acmos` | 停止 |
+| `brew services restart acmos` | 重启 |
+| `brew services info acmos` | 查看状态 |
+| `brew upgrade acmos` | 升级 |
+
+默认监听 `http://127.0.0.1:20129`。健康检查：
 
 ```bash
 curl http://127.0.0.1:20129/health
@@ -238,13 +247,21 @@ Claude Code 使用 Anthropic Messages，用户级 `~/.claude/settings.json` 可�
 
 ## 开发
 
+前置条件：Bun >= 1.2。
+
 ```bash
 bun install
-bun run dev
+bun run dev       # 启动，文件变更自动重启
 bun run typecheck
 bun run lint
 bun run test
 bun run format
+```
+
+构建独立二进制（发布用）：
+
+```bash
+bun build --compile src/cli.ts --outfile dist/acmos
 ```
 
 配置变更会热重载；解析或交叉校验失败时继续保留旧配置。启动或热重载成功后会生成脱敏快照：
@@ -287,45 +304,6 @@ jq 'select(.level == "warn" or .level == "error")' ~/.acmos/logs/acmos-$(date +%
 
 请求体排障：将 `log.level` 调为 `debug` 并临时设置 `log.captureBody: true`，复现一次后立即关闭。已记录的请求体可能包含用户内容；日志会递归脱敏常见 token/header 字段，但仍应按敏感数据处理。
 
-## 安装（Homebrew）
-
-acmos 发布为独立二进制，通过 Homebrew 安装，零运行时依赖：
-
-```bash
-brew tap charlzyx/acmos https://github.com/charlzyx/acmos
-brew install acmos
-```
-
-首次使用需准备配置：
-
-```bash
-mkdir -p ~/.acmos
-cp config.example.yml ~/.acmos/config.yml
-# 编辑 ~/.acmos/config.yml，把密钥写入 ~/.acmos/.env
-```
-
-## 开机自启
-
-```bash
-brew services start acmos
-```
-
-| 命令 | 作用 |
-|---|---|
-| `brew services start acmos` | 启动，开机自启 |
-| `brew services stop acmos` | 停止 |
-| `brew services restart acmos` | 重启 |
-| `brew services info acmos` | 查看状态 |
-
-日志输出在 `$(brew --prefix)/var/acmos/logs/`。
-
-## 升级
-
-```bash
-brew update
-brew upgrade acmos
-brew services restart acmos
-```
 
 ## 安全边界
 
