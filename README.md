@@ -2,7 +2,7 @@
 
 acmos — 交流电般丝滑切换的多协议 AI 代理。对下游提供 OpenAI Chat Completions、Anthropic Messages 和 OpenAI Responses；对上游可按 provider 使用 `cc`、`am` 或 `resp` 协议。`combo/*` 是按顺序 fallback 的虚拟模型。
 
-*Inspired by 9router, cliproxyapi.*
+*Inspired by [9router](https://github.com/ztelliot/9router) and [cliproxyapi](https://github.com/ztelliot/cliproxyapi).*
 
 ## 能力
 
