@@ -287,29 +287,45 @@ jq 'select(.level == "warn" or .level == "error")' ~/.acmos/logs/acmos-$(date +%
 
 请求体排障：将 `log.level` 调为 `debug` 并临时设置 `log.captureBody: true`，复现一次后立即关闭。已记录的请求体可能包含用户内容；日志会递归脱敏常见 token/header 字段，但仍应按敏感数据处理。
 
-## 开机自启（macOS launchd）
+## 安装（Homebrew）
+
+acmos 发布为独立二进制，通过 Homebrew 安装，零运行时依赖：
 
 ```bash
-# 安装 plist 到用户 LaunchAgents
-cp devtools/dev.charlzyx.acmos.plist ~/Library/LaunchAgents/
-
-# 加载服务（立即启动 + 开机自启）
-launchctl load ~/Library/LaunchAgents/dev.charlzyx.acmos.plist
-
-# 查看状态
-launchctl list dev.charlzyx.acmos
-
-# 手动启停
-launchctl start dev.charlzyx.acmos
-launchctl stop dev.charlzyx.acmos
-
-# 卸载
-launchctl unload ~/Library/LaunchAgents/dev.charlzyx.acmos.plist
+brew tap charlzyx/acmos https://github.com/charlzyx/acmos
+brew install acmos
 ```
 
-日志输出在 `devtools/acmos-stdout.log` 和 `devtools/acmos-stderr.log`。
+首次使用需准备配置：
 
-> 首次启动前确保配置文件就绪：`~/.acmos/config.yml` 和 `~/.acmos/.env`。
+```bash
+mkdir -p ~/.acmos
+cp config.example.yml ~/.acmos/config.yml
+# 编辑 ~/.acmos/config.yml，把密钥写入 ~/.acmos/.env
+```
+
+## 开机自启
+
+```bash
+brew services start acmos
+```
+
+| 命令 | 作用 |
+|---|---|
+| `brew services start acmos` | 启动，开机自启 |
+| `brew services stop acmos` | 停止 |
+| `brew services restart acmos` | 重启 |
+| `brew services info acmos` | 查看状态 |
+
+日志输出在 `$(brew --prefix)/var/acmos/logs/`。
+
+## 升级
+
+```bash
+brew update
+brew upgrade acmos
+brew services restart acmos
+```
 
 ## 安全边界
 
