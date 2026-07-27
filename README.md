@@ -68,18 +68,39 @@ curl http://127.0.0.1:20129/v1/models \
   -H 'Authorization: Bearer your-local-key'
 ```
 
+## 体验配置
+
+没有上游 API key？用 OpenCode Zen 免费版即可开箱体验（[免费注册拿 key](https://opencode.ai)）：
+
+`~/.acmos/config.yml`：
+
+```yaml
+providers:
+  opencode:
+    wire: cc
+    baseUrl: https://opencode.ai/zen/v1
+    apiKey: "${env:OPENCODE_KEY}"
+
+combo:
+  free:
+    members:
+      - { provider: opencode, model: claude-sonnet-5 }
+```
+
+`~/.acmos/.env`：
+
+```dotenv
+OPENCODE_KEY=sk-...   # 去 opencode.ai 免费拿
+```
+
+```bash
+brew services restart acmos
+curl http://127.0.0.1:20129/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"combo/free","messages":[{"role":"user","content":"只回复 OK"}]}'
+```
+
 ## 下游 API
-
-| API | 路径 |
-| --- | --- |
-| OpenAI Chat Completions | `POST /v1/chat/completions` |
-| Anthropic Messages | `POST /v1/messages` |
-| OpenAI Responses | `POST /v1/responses` |
-| 模型列表 | `GET /v1/models` |
-| 健康检查 | `GET /health` |
-
-优先使用 combo：`combo/max`、`combo/coder`、`combo/fast`、`combo/free`。直连模型使用 `provider/model-id`，例如 `codex/gpt-5.6-terra`。provider 可以配置 `aliases`；模型不使用别名。
-
 Chat Completions 示例：
 
 ```bash
