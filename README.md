@@ -70,7 +70,7 @@ curl http://127.0.0.1:20129/v1/models \
 
 ## 体验配置
 
-没有上游 API key？用 OpenCode Zen 免费版即可开箱体验（[免费注册拿 key](https://opencode.ai)）。需要更大的速率上限可以用 [OpenCode Go](https://opencode.ai/go?ref=QEF4MGNQKH)。
+没有上游 API key？用 OpenCode Zen 免费版即可开箱体验（[免费注册拿 key](https://opencode.ai)）。需要更大的速率上限可以用 [OpenCode Go](https://opencode.ai/go?ref=WZ29Q4GHM0)。
 
 `~/.acmos/config.yml`：
 
