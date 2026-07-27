@@ -94,8 +94,14 @@ providers:
 
 combo:
   free:
+    description: 免费档，按顺序 fallback
     members:
       - { provider: opencode, model: deepseek-v4-flash-free }
+      - { provider: opencode, model: mimo-v2.5-free }
+      - { provider: opencode, model: ling-3.0-flash-free }
+      - { provider: opencode, model: nemotron-3-ultra-free }
+      - { provider: opencode, model: north-mini-code-free }
+      - { provider: opencode, model: laguna-s-2.1-free }
 ```
 
 `~/.acmos/.env`：
