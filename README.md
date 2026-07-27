@@ -80,11 +80,22 @@ providers:
     wire: cc
     baseUrl: https://opencode.ai/zen/v1
     apiKey: "${env:OPENCODE_KEY}"
+    defaults:
+      compat:
+        supportsDeveloperRole: false
+        maxTokensField: max_tokens
+    models:
+      - id: deepseek-v4-flash-free
+      - id: mimo-v2.5-free
+      - id: ling-3.0-flash-free
+      - id: nemotron-3-ultra-free
+      - id: north-mini-code-free
+      - id: laguna-s-2.1-free
 
 combo:
   free:
     members:
-      - { provider: opencode, model: claude-sonnet-5 }
+      - { provider: opencode, model: deepseek-v4-flash-free }
 ```
 
 `~/.acmos/.env`：
@@ -97,7 +108,7 @@ OPENCODE_KEY=sk-...   # 去 opencode.ai 免费拿
 brew services restart acmos
 curl http://127.0.0.1:20129/v1/chat/completions \
   -H 'Content-Type: application/json' \
-  -d '{"model":"combo/free","messages":[{"role":"user","content":"只回复 OK"}]}'
+  -d '{"model":"combo/free","messages":[{"role":"user","content":"be concise, say OK"}]}'
 ```
 
 ## 下游 API
