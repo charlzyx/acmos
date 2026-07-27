@@ -198,6 +198,67 @@ export interface UpstreamCallOptions {
   /** `keyStrategy: failover` 下本次尝试的 key 下标。 */
   keyIndex?: number | undefined;
 }
+/**
+ * 先读取一个响应块再把它放回流中。HTTP 200 仅代表响应头到达；流式上游可能在
+ * 首个 SSE 块前断开。把这个阶段的失败留在 dispatch 内，combo 才能安全 fallback。
+ */
+async function prefetchResponseBody(response: Response): Promise<Response> {
+  if (!response.body) throw new Error('上游未返回响应体');
+
+  const reader = response.body.getReader();
+  let first: { done: boolean; value?: Uint8Array };
+  try {
+    first = await reader.read();
+  } catch (error) {
+    reader.releaseLock();
+    throw error;
+  }
+
+  if (first.done) {
+    reader.releaseLock();
+    throw new Error('上游流在首个数据块前结束');
+  }
+
+  let released = false;
+  const release = (): void => {
+    if (released) return;
+    released = true;
+    reader.releaseLock();
+  };
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(first.value);
+    },
+    async pull(controller) {
+      try {
+        const next = await reader.read();
+        if (next.done) {
+          controller.close();
+          release();
+          return;
+        }
+        controller.enqueue(next.value);
+      } catch (error) {
+        controller.error(error);
+        release();
+      }
+    },
+    async cancel(reason) {
+      try {
+        await reader.cancel(reason);
+      } finally {
+        release();
+      }
+    },
+  });
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
+
 export async function callUpstream(options: UpstreamCallOptions): Promise<Response> {
   const { target, path, body, signal, globalProxy, logger, extraHeaders, sessionId, keyIndex } =
     options;
@@ -227,6 +288,7 @@ export async function callUpstream(options: UpstreamCallOptions): Promise<Respon
       ...(proxy ? { proxy } : {}),
     });
   } catch (err) {
+    clearTimeout(firstByteTimer);
     if (err instanceof UpstreamError) throw err;
     if (signal?.aborted) {
       throw new UpstreamError({ kind: 'canceled', message: '客户端已断开连接' });
@@ -248,8 +310,6 @@ export async function callUpstream(options: UpstreamCallOptions): Promise<Respon
       message: `连接上游 ${target.providerId} 失败：${String(err)}`,
       raw: err,
     });
-  } finally {
-    clearTimeout(firstByteTimer);
   }
 
   logger.debug('上游响应头已到达', {
@@ -260,6 +320,7 @@ export async function callUpstream(options: UpstreamCallOptions): Promise<Respon
   });
 
   if (!response.ok) {
+    clearTimeout(firstByteTimer);
     const text = await response.text().catch(() => '');
     throw new UpstreamError({
       kind: classifyStatus(response.status),
@@ -269,6 +330,33 @@ export async function callUpstream(options: UpstreamCallOptions): Promise<Respon
       raw: text,
     });
   }
-
-  return response;
+  try {
+    if (typeof body !== 'object' || body === null || (body as { stream?: unknown }).stream !== true) {
+      return response;
+    }
+    return await prefetchResponseBody(response);
+  } catch (err) {
+    if (signal?.aborted) {
+      throw new UpstreamError({ kind: 'canceled', message: '客户端已断开连接' });
+    }
+    if (firstByte.signal.aborted) {
+      throw new UpstreamError({
+        kind: 'timeout',
+        message: `上游 ${target.providerId} 首字节超时（${target.provider.firstByteTimeoutMs}ms）`,
+      });
+    }
+    if (timeout.aborted) {
+      throw new UpstreamError({
+        kind: 'timeout',
+        message: `上游 ${target.providerId} 超时（${target.provider.timeoutMs}ms）`,
+      });
+    }
+    throw new UpstreamError({
+      kind: 'upstream',
+      message: `上游 ${target.providerId} 在首个响应块前断开：${String(err)}`,
+      raw: err,
+    });
+  } finally {
+    clearTimeout(firstByteTimer);
+  }
 }

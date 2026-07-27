@@ -1,8 +1,8 @@
 class Acmos < Formula
   desc "Multi-format AI proxy with combo virtual providers"
   homepage "https://github.com/charlzyx/acmos"
-  url "https://github.com/charlzyx/acmos/releases/download/v0.1.3/acmos"
-  sha256 "2dce8ef081b2e9728526e4c4e8ed8a0a9164d5048d74e89a5aa1002fedc4fe92"
+  url "https://github.com/charlzyx/acmos/releases/download/v0.1.4/acmos"
+  sha256 "6b403178811ef74ad6eca1342f691454ae134bad82f41f0b6e456ee3d2896b8c"
   license "MIT"
 
   def install
@@ -23,6 +23,6 @@ class Acmos < Formula
   end
 
   test do
-    assert_match "0.1.3", shell_output("#{bin}/acmos --version")
+    assert_match "0.1.4", shell_output("#{bin}/acmos --version")
   end
 end

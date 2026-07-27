@@ -24,14 +24,16 @@ brew tap charlzyx/acmos https://github.com/charlzyx/acmos
 brew install acmos
 ```
 
-Prepare config:
+Prepare Homebrew service configuration:
 
 ```bash
-mkdir -p ~/.acmos
-cp config.example.yml ~/.acmos/config.yml
+ACMOS_HOME="$(brew --prefix)/var/acmos"
+mkdir -p "$ACMOS_HOME"
+curl -fsSL https://raw.githubusercontent.com/charlzyx/acmos/v0.1.4/config.example.yml \
+  -o "$ACMOS_HOME/config.yml"
 ```
 
-Put secrets in `~/.acmos/.env`:
+Put secrets in `$ACMOS_HOME/.env`:
 
 ```dotenv
 DEEPSEEK_API_KEY=...
@@ -41,10 +43,11 @@ ARK_API_KEY=...
 
 Reference env vars in config via `${env:NAME}`. Shell-exported vars take precedence over `.env`.
 
-Config path resolution:
+Configuration locations:
 
-- `ACMOS_CONFIG=/absolute/path/config.yml`: explicit config file.
-- `ACMOS_HOME=/absolute/path`: data directory; defaults to `~/.acmos`.
+- `brew services` sets `ACMOS_HOME=$(brew --prefix)/var/acmos`; it reads `config.yml` and `.env` from that directory.
+- A directly started process defaults to `~/.acmos`; set `ACMOS_HOME=/absolute/path` to choose a data directory.
+- `ACMOS_CONFIG=/absolute/path/config.yml`: explicit configuration file.
 
 Start the service:
 
@@ -393,14 +396,16 @@ brew tap charlzyx/acmos https://github.com/charlzyx/acmos
 brew install acmos
 ```
 
-准备配置：
+准备 Homebrew 服务配置：
 
 ```bash
-mkdir -p ~/.acmos
-cp config.example.yml ~/.acmos/config.yml
+ACMOS_HOME="$(brew --prefix)/var/acmos"
+mkdir -p "$ACMOS_HOME"
+curl -fsSL https://raw.githubusercontent.com/charlzyx/acmos/v0.1.4/config.example.yml \
+  -o "$ACMOS_HOME/config.yml"
 ```
 
-把密钥写入 `~/.acmos/.env`：
+把密钥写入 `$ACMOS_HOME/.env`：
 
 ```dotenv
 DEEPSEEK_API_KEY=...
@@ -410,10 +415,11 @@ ARK_API_KEY=...
 
 配置中通过 `${env:NAME}` 引用环境变量。shell 已导出的同名变量优先于 `.env`。
 
-配置路径优先级：
+配置文件位置：
 
+- `brew services` 会设置 `ACMOS_HOME=$(brew --prefix)/var/acmos`，从该目录读取 `config.yml` 和 `.env`。
+- 直接启动进程默认使用 `~/.acmos`；可用 `ACMOS_HOME=/absolute/path` 指定数据目录。
 - `ACMOS_CONFIG=/absolute/path/config.yml`：指定配置文件。
-- `ACMOS_HOME=/absolute/path`：指定数据目录；默认 `~/.acmos`。
 
 启动服务：
 
