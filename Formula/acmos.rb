@@ -2,7 +2,7 @@ class Acmos < Formula
   desc "Multi-format AI proxy with combo virtual providers"
   homepage "https://github.com/charlzyx/acmos"
   url "https://github.com/charlzyx/acmos/releases/download/v0.1.0/acmos"
-  sha256 "1f095559ebc34df56229fa66dc7d3ee8c6f52f9bc22cc68af9d913ce739c36f3"
+  sha256 "884a780004e3890c0b56cd200602df56f57fbc934c63ba6e677b6f7e2d801fab"
   license "MIT"
 
   def install
