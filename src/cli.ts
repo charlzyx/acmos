@@ -2,13 +2,26 @@
 import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { type AppContext, createContext } from './app.ts';
-import { ConfigError, type ConfigWatcher, watchAcmosConfig } from './config/load.ts';
-import { configPath, daemonLogPath, dataDir, logDir, runtimePath } from './config/paths.ts';
+import {
+  ConfigError,
+  type ConfigWatcher,
+  loadAcmosConfig,
+  watchAcmosConfig,
+} from './config/load.ts';
+import {
+  configPath,
+  configSnapshotPath,
+  daemonLogPath,
+  dataDir,
+  envPath,
+  logDir,
+  runtimePath,
+} from './config/paths.ts';
 import { logger } from './log/logger.ts';
 import { createServer } from './server.ts';
 
 const NAME = 'acmos';
-const VERSION = '0.1.7';
+const VERSION = '0.1.8';
 const START_TIMEOUT_MS = 5_000;
 
 interface RuntimeInfo {
@@ -19,21 +32,212 @@ interface RuntimeInfo {
   config: string;
 }
 
-function helpText(): string {
+interface ServiceInfo {
+  host: string;
+  port: number;
+  url: string;
+  config: string;
+  status: 'healthy' | 'unhealthy' | 'not-running';
+  warning?: string;
+}
+
+async function serviceInfo(): Promise<ServiceInfo> {
+  const runtime = readRuntime();
+  if (runtime && isProcessRunning(runtime.pid)) {
+    const healthy = await isHealthy(runtime);
+    if (healthy) {
+      return {
+        host: runtime.host,
+        port: runtime.port,
+        url: serviceUrl(runtime),
+        config: runtime.config,
+        status: 'healthy',
+      };
+    }
+  }
+
+  try {
+    const loaded = await loadAcmosConfig();
+    const info: RuntimeInfo = {
+      pid: 0,
+      host: loaded.config.host,
+      port: loaded.config.port,
+      startedAt: '',
+      config: loaded.sourcePath,
+    };
+    return {
+      host: info.host,
+      port: info.port,
+      url: serviceUrl(info),
+      config: info.config,
+      status: runtime && isProcessRunning(runtime.pid) ? 'unhealthy' : 'not-running',
+      ...(runtime && isProcessRunning(runtime.pid)
+        ? { warning: `PID ${runtime.pid} 存在，但健康检查失败；以下连接信息来自配置文件` }
+        : {}),
+    };
+  } catch (err) {
+    const info: RuntimeInfo = {
+      pid: 0,
+      host: '127.0.0.1',
+      port: 20129,
+      startedAt: '',
+      config: configPath(),
+    };
+    const message = err instanceof ConfigError ? err.summary : '配置读取失败';
+    return {
+      host: info.host,
+      port: info.port,
+      url: serviceUrl(info),
+      config: info.config,
+      status: 'not-running',
+      warning: `${message}；以下连接信息为默认值`,
+    };
+  }
+}
+
+async function helpText(): Promise<string> {
+  const info = await serviceInfo();
   return `${NAME} ${VERSION}
 
 启动:
   acmos serve        前台启动服务
   acmos serve -d     后台启动服务
 
-常用 URL:
-  GET  /health                 健康检查
-  GET  /v1/models              可用模型列表
-  POST /v1/chat/completions    OpenAI Chat Completions
-  POST /v1/messages            Anthropic Messages
-  POST /v1/responses           OpenAI Responses
+连接${info.warning ? `（${info.warning}）` : ''}:
+  Host/IP             ${info.host}
+  Port                ${info.port}
+  OpenAI Base URL     ${info.url}/v1
+  Anthropic Base URL  ${info.url}
 
-配置文件: ${configPath()}
+常用 URL:
+  GET  ${info.url}/health
+  GET  ${info.url}/v1/models
+  POST ${info.url}/v1/chat/completions
+  POST ${info.url}/v1/messages
+  POST ${info.url}/v1/responses
+
+配置文件: ${info.config}
+Agent 文档: acmos --llm
+`;
+}
+
+async function llmText(): Promise<string> {
+  const info = await serviceInfo();
+  const status = info.status;
+  return `# acmos Agent Guide
+
+acmos is a local multi-format AI proxy. Use this document to configure an AI client or diagnose acmos without guessing paths, ports, or protocols.
+
+## Current installation
+
+- Status: ${status}${info.warning ? ` (${info.warning})` : ''}
+- Host/IP: ${info.host}
+- Port: ${info.port}
+- OpenAI-compatible base URL: ${info.url}/v1
+- Anthropic base URL: ${info.url}
+- Config: ${info.config}
+- Secrets/env file: ${envPath()}
+- Runtime state: ${runtimePath()}
+- Redacted config snapshot: ${configSnapshotPath()}
+- Structured logs: ${logDir()}/acmos-YYYY-MM-DD.jsonl
+- Detached-process output: ${daemonLogPath()}
+
+Do not print, copy, or commit API keys, OAuth tokens, the env file, raw request bodies, or unredacted logs.
+
+## Start and inspect
+
+\`\`\`bash
+acmos serve          # foreground
+acmos serve -d       # detached
+acmos                # status, PID, port, URL, and config path
+brew services restart acmos  # Homebrew-managed service
+curl -fsS ${info.url}/health
+\`\`\`
+
+If acmos is installed by Homebrew, its default data directory is \`$(brew --prefix)/var/acmos\`. A source/direct install defaults to \`~/.acmos\`. \`ACMOS_HOME\` overrides the data directory; \`ACMOS_CONFIG\` overrides only the config file.
+
+## Client configuration
+
+OpenAI-compatible clients:
+
+\`\`\`yaml
+baseUrl: ${info.url}/v1
+apiKey: <one local key from config apiKeys, if configured>
+model: <choose an ID from GET /v1/models>
+api: openai-completions
+\`\`\`
+
+Anthropic Messages clients:
+
+\`\`\`text
+ANTHROPIC_BASE_URL=${info.url}
+ANTHROPIC_API_KEY=<one local key from config apiKeys, if configured>
+model=<choose an ID from GET /v1/models>
+\`\`\`
+
+Endpoints:
+
+- \`POST ${info.url}/v1/chat/completions\` — OpenAI Chat Completions
+- \`POST ${info.url}/v1/messages\` — Anthropic Messages
+- \`POST ${info.url}/v1/responses\` — OpenAI Responses
+- \`GET ${info.url}/v1/models\` — configured direct and combo model IDs
+- \`GET ${info.url}/health\` — health and config source
+
+Use \`${info.url}/v1\` as an OpenAI base URL. Use \`${info.url}\` without \`/v1\` as an Anthropic base URL. Do not append an endpoint twice.
+
+## Config model
+
+\`\`\`yaml
+host: 127.0.0.1
+port: 20129
+apiKeys: []  # local ingress authentication; prefer env references
+proxy: http://127.0.0.1:7890
+
+providers:
+  example:
+    wire: cc  # cc | am | resp
+    baseUrl: https://example.com/v1
+    proxy: true  # opt in to the top-level proxy
+    apiKey: "\${env:EXAMPLE_API_KEY}"
+    models:
+      - id: example-model
+
+combo:
+  coder:
+    members:
+      - { provider: example, model: example-model }
+\`\`\`
+
+Provider secrets should live in the env file and be referenced as \`"\${env:NAME}"\`. Public model names are \`combo/<combo-id>\` or \`<provider-id>/<model-id>\`. After editing config, acmos hot-reloads valid changes and keeps the old config if validation fails.
+
+## Diagnostic procedure
+
+1. Run \`acmos\`. Confirm status, config path, Host/IP, and Port.
+2. Run \`curl -fsS ${info.url}/health\`. If it fails, inspect the service and stderr logs.
+3. Query \`${info.url}/v1/models\`. If \`apiKeys\` is configured, send \`Authorization: Bearer <local-key>\`; never expose the key in the report.
+4. Inspect the config structure and the redacted snapshot. Do not output secret values.
+5. Inspect recent warnings/errors:
+
+\`\`\`bash
+tail -n 200 ${logDir()}/acmos-$(date +%F).jsonl | jq 'select(.level == "warn" or .level == "error")'
+tail -n 200 ${daemonLogPath()}
+\`\`\`
+
+6. Correlate one request using its \`x-acmos-request-id\` / log \`reqId\`.
+7. Only for body-conversion bugs, temporarily set \`log.level: debug\` and \`log.captureBody: true\`, reproduce once, then immediately disable it. Treat captured bodies as sensitive.
+
+Common failures:
+
+- \`401/auth\`: distinguish local ingress \`apiKeys\` from provider credentials; for Codex verify \`~/.codex/auth.json\` and run \`codex login\` if refresh credentials are invalid.
+- \`400/badRequest\`: check target \`wire\`, request endpoint, tool-call/result pairing, and provider \`compat\` settings.
+- \`404/notFound\`: compare the requested model with \`GET /v1/models\` and combo/provider IDs.
+- \`429/quota\`: inspect fallback, cooldown, key strategy, and provider quota.
+- \`504/timeout\`: inspect \`firstByteTimeoutMs\`, \`timeoutMs\`, proxy configuration, and upstream connectivity.
+- Process exists but health fails: inspect runtime state and stderr logs; do not kill an unrelated PID solely from a stale file.
+
+## Safety
+
+Keep \`host: 127.0.0.1\` for local use. Before binding externally, require strong \`apiKeys\`, TLS through a reverse proxy, and explicit user approval. Never silently weaken authentication or enable request-body capture.
 `;
 }
 
@@ -134,7 +338,7 @@ async function printStatusOrHelp(): Promise<void> {
   const runtime = readRuntime();
   if (!runtime || !isProcessRunning(runtime.pid)) {
     if (runtime) removeRuntimeIfOwned(runtime.pid);
-    process.stdout.write(helpText());
+    process.stdout.write(await helpText());
     return;
   }
 
@@ -292,7 +496,11 @@ async function main(): Promise<void> {
     return;
   }
   if ((command === '--help' || command === '-h' || command === 'help') && options.length === 0) {
-    process.stdout.write(helpText());
+    process.stdout.write(await helpText());
+    return;
+  }
+  if (command === '--llm' && options.length === 0) {
+    process.stdout.write(await llmText());
     return;
   }
   if (command === 'serve') {
@@ -306,7 +514,7 @@ async function main(): Promise<void> {
     }
   }
 
-  process.stderr.write(`未知命令或选项: ${args.join(' ')}\n\n${helpText()}`);
+  process.stderr.write(`未知命令或选项: ${args.join(' ')}\n\n${await helpText()}`);
   process.exitCode = 2;
 }
 
