@@ -359,14 +359,21 @@ export function buildCcToAmRequest(body: CcRequestBody, target: ResolvedTarget):
     if (role === 'tool') {
       const id = typeof message.tool_call_id === 'string' ? message.tool_call_id : '';
       if (id) {
-        messages.push({
-          role: 'user',
-          content: [{
-            type: 'tool_result',
-            tool_use_id: id,
-            content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
-          }],
-        });
+        const result: AmToolResultBlock = {
+          type: 'tool_result',
+          tool_use_id: id,
+          content:
+            typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+        };
+        const previous = messages.at(-1);
+        if (previous?.role === 'user' && Array.isArray(previous.content)) {
+          const onlyToolResults = previous.content.every((block) => block.type === 'tool_result');
+          if (onlyToolResults) {
+            previous.content.push(result);
+            continue;
+          }
+        }
+        messages.push({ role: 'user', content: [result] });
       }
       continue;
     }

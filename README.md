@@ -29,7 +29,7 @@ Prepare Homebrew service configuration:
 ```bash
 ACMOS_HOME="$(brew --prefix)/var/acmos"
 mkdir -p "$ACMOS_HOME"
-curl -fsSL https://raw.githubusercontent.com/charlzyx/acmos/v0.1.5/config.example.yml \
+curl -fsSL https://raw.githubusercontent.com/charlzyx/acmos/v0.1.6/config.example.yml \
   -o "$ACMOS_HOME/config.yml"
 ```
 
@@ -49,11 +49,14 @@ Configuration locations:
 - A directly started process defaults to `~/.acmos`; set `ACMOS_HOME=/absolute/path` to choose a data directory.
 - `ACMOS_CONFIG=/absolute/path/config.yml`: explicit configuration file.
 
-Start the service:
+Start the service directly in the foreground or as a detached process:
 
 ```bash
-brew services start acmos
+acmos serve
+acmos serve -d
 ```
+
+Running `acmos` without arguments prints the current status and port when the service is up, or a short help message otherwise. Homebrew can also manage the service:
 
 | Command | Action |
 |---|---|
@@ -401,7 +404,7 @@ brew install acmos
 ```bash
 ACMOS_HOME="$(brew --prefix)/var/acmos"
 mkdir -p "$ACMOS_HOME"
-curl -fsSL https://raw.githubusercontent.com/charlzyx/acmos/v0.1.5/config.example.yml \
+curl -fsSL https://raw.githubusercontent.com/charlzyx/acmos/v0.1.6/config.example.yml \
   -o "$ACMOS_HOME/config.yml"
 ```
 
@@ -421,11 +424,14 @@ ARK_API_KEY=...
 - 直接启动进程默认使用 `~/.acmos`；可用 `ACMOS_HOME=/absolute/path` 指定数据目录。
 - `ACMOS_CONFIG=/absolute/path/config.yml`：指定配置文件。
 
-启动服务：
+直接以前台或后台方式启动服务：
 
 ```bash
-brew services start acmos
+acmos serve
+acmos serve -d
 ```
+
+不带参数执行 `acmos` 时，如果服务已启动，会显示当前状态和端口；否则显示简短帮助。也可以交给 Homebrew 管理：
 
 | 命令 | 作用 |
 |---|---|

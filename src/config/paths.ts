@@ -29,6 +29,16 @@ export function statePath(): string {
   return join(dataDir(), 'state.db');
 }
 
+/** 当前服务进程信息，供 CLI 查询状态。 */
+export function runtimePath(): string {
+  return join(dataDir(), 'runtime.json');
+}
+
+/** `acmos serve -d` 的标准输出与错误日志。 */
+export function daemonLogPath(): string {
+  return join(logDir(), 'daemon.log');
+}
+
 export function logDir(): string {
   return join(dataDir(), 'logs');
 }
