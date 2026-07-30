@@ -7,6 +7,7 @@ import {
   pickKey,
   UpstreamCompatibilityError,
   UpstreamError,
+  UpstreamStreamPreflightError,
 } from '../upstream/client.ts';
 import type { ResolvedTarget, Route } from './registry.ts';
 
@@ -84,7 +85,7 @@ export async function dispatch(options: DispatchOptions): Promise<DispatchResult
   let lastError: UpstreamError | undefined;
   let attempt = 0;
 
-  for (const target of ordered) {
+  for (const [targetIndex, target] of ordered.entries()) {
     const key = cooldownKey(target);
     const until = store.getCooldown(key);
     if (until !== undefined) {
@@ -103,39 +104,52 @@ export async function dispatch(options: DispatchOptions): Promise<DispatchResult
       const keyAttempts = keyFailover ? target.auth.keys.length : 1;
       let response: Response | undefined;
 
-      for (let keyAttempt = 0; keyAttempt < keyAttempts; keyAttempt++) {
+      for (let preflightAttempt = 0; preflightAttempt <= 2; preflightAttempt++) {
         try {
-          response = await callUpstream({
-            target,
-            path: resolvePath(target),
-            body,
-            signal,
-            globalProxy: options.globalProxy,
-            logger,
-            sessionId,
-            ...(keyFailover
-              ? { keyIndex: (startKeyIndex + keyAttempt) % target.auth.keys.length }
-              : {}),
-          });
+          for (let keyAttempt = 0; keyAttempt < keyAttempts; keyAttempt++) {
+            try {
+              response = await callUpstream({
+                target,
+                path: resolvePath(target),
+                body,
+                signal,
+                globalProxy: options.globalProxy,
+                logger,
+                sessionId,
+                ...(keyFailover
+                  ? { keyIndex: (startKeyIndex + keyAttempt) % target.auth.keys.length }
+                  : {}),
+              });
+              break;
+            } catch (err) {
+              const error =
+                err instanceof UpstreamError
+                  ? err
+                  : new UpstreamError({ kind: 'internal', message: String(err), raw: err });
+              if (
+                error.kind === 'canceled' ||
+                !isFailoverable(error.kind) ||
+                keyAttempt === keyAttempts - 1
+              ) {
+                throw error;
+              }
+              logger.warn('同一上游的 API key 失败，尝试下一把 key', {
+                provider: target.providerId,
+                model: target.modelId,
+                keyAttempt,
+                kind: error.kind,
+                status: error.httpStatus,
+              });
+            }
+          }
           break;
         } catch (err) {
-          const error =
-            err instanceof UpstreamError
-              ? err
-              : new UpstreamError({ kind: 'internal', message: String(err), raw: err });
-          if (
-            error.kind === 'canceled' ||
-            !isFailoverable(error.kind) ||
-            keyAttempt === keyAttempts - 1
-          ) {
-            throw error;
-          }
-          logger.warn('同一上游的 API key 失败，尝试下一把 key', {
+          if (!(err instanceof UpstreamStreamPreflightError) || preflightAttempt === 2) throw err;
+          attempt++;
+          logger.warn('上游在首个有效输出前失败，重试同一成员', {
             provider: target.providerId,
             model: target.modelId,
-            keyAttempt,
-            kind: error.kind,
-            status: error.httpStatus,
+            preflightAttempt: preflightAttempt + 1,
           });
         }
       }
@@ -146,7 +160,7 @@ export async function dispatch(options: DispatchOptions): Promise<DispatchResult
         });
       }
 
-      if (attempt > 0 || skipped.length > 0) {
+      if (targetIndex > 0 || skipped.length > 0) {
         logger.info('已 fallback 到备选上游', {
           provider: target.providerId,
           model: target.modelId,

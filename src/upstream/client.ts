@@ -2,6 +2,7 @@ import type { IRError } from '../ir/types.ts';
 import type { Logger } from '../log/logger.ts';
 import type { ResolvedTarget } from '../routing/registry.ts';
 import { getChatGptToken } from './auth/chatgptOAuth.ts';
+import { parseSseStream, type SseEvent } from './sse.ts';
 
 /**
  * 上游 HTTP 客户端。
@@ -35,6 +36,14 @@ export class UpstreamCompatibilityError extends UpstreamError {
   constructor(message: string) {
     super({ kind: 'badRequest', message });
     this.name = 'UpstreamCompatibilityError';
+  }
+}
+
+/** 首个有效 SSE 数据前的上游错误；dispatch 可安全重试同一目标。 */
+export class UpstreamStreamPreflightError extends UpstreamError {
+  constructor(message: string, raw?: unknown) {
+    super({ kind: 'upstream', message, raw });
+    this.name = 'UpstreamStreamPreflightError';
   }
 }
 
@@ -198,66 +207,77 @@ export interface UpstreamCallOptions {
   /** `keyStrategy: failover` 下本次尝试的 key 下标。 */
   keyIndex?: number | undefined;
 }
+function sseErrorMessage(event: SseEvent): string | undefined {
+  if (event.event === 'error') return event.data;
+
+  try {
+    const parsed: unknown = JSON.parse(event.data);
+    if (typeof parsed !== 'object' || parsed === null) return undefined;
+    if (!('error' in parsed) && !('type' in parsed && parsed.type === 'error')) return undefined;
+    return event.data;
+  } catch {
+    return undefined;
+  }
+}
+
+function responseErrorMessage(text: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (typeof parsed !== 'object' || parsed === null) return undefined;
+    if ('type' in parsed && parsed.type === 'error') return text;
+    if (!('error' in parsed) || parsed.error === null || parsed.error === undefined)
+      return undefined;
+    return text;
+  } catch {
+    return undefined;
+  }
+}
+
+async function preflightNonStreamingResponse(response: Response): Promise<Response> {
+  const message = responseErrorMessage(await response.clone().text());
+  if (message === undefined) return response;
+
+  await response.body?.cancel();
+  throw new UpstreamStreamPreflightError(`上游在响应体内返回错误：${message}`, message);
+}
+
 /**
- * 先读取一个响应块再把它放回流中。HTTP 200 仅代表响应头到达；流式上游可能在
- * 首个 SSE 块前断开。把这个阶段的失败留在 dispatch 内，combo 才能安全 fallback。
+ * HTTP 200 不代表 SSE 已经开始：上游可能在首个有效事件前关闭，或发出 error 事件。
+ * 借助 tee 保留另一支的原始字节，确认成功后依旧逐字节透传给调用方。
  */
-async function prefetchResponseBody(response: Response): Promise<Response> {
+async function preflightResponseBody(response: Response): Promise<Response> {
   if (!response.body) throw new Error('上游未返回响应体');
 
-  const reader = response.body.getReader();
-  let first: { done: boolean; value?: Uint8Array };
+  const [inspection, passthrough] = response.body.tee();
+  const events = parseSseStream(inspection);
+  let first: IteratorResult<SseEvent>;
   try {
-    first = await reader.read();
-  } catch (error) {
-    reader.releaseLock();
-    throw error;
+    first = await events.next();
+  } finally {
+    await events.return(undefined);
+    await inspection.cancel();
   }
 
   if (first.done) {
-    reader.releaseLock();
-    throw new Error('上游流在首个数据块前结束');
+    await passthrough.cancel();
+    throw new UpstreamStreamPreflightError('上游流在首个有效 SSE 数据前结束');
   }
 
-  let released = false;
-  const release = (): void => {
-    if (released) return;
-    released = true;
-    reader.releaseLock();
-  };
-  const body = new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(first.value);
-    },
-    async pull(controller) {
-      try {
-        const next = await reader.read();
-        if (next.done) {
-          controller.close();
-          release();
-          return;
-        }
-        controller.enqueue(next.value);
-      } catch (error) {
-        controller.error(error);
-        release();
-      }
-    },
-    async cancel(reason) {
-      try {
-        await reader.cancel(reason);
-      } finally {
-        release();
-      }
-    },
-  });
-  return new Response(body, {
+  const message = sseErrorMessage(first.value);
+  if (message !== undefined) {
+    await passthrough.cancel();
+    throw new UpstreamStreamPreflightError(
+      `上游在首个 SSE 数据前返回错误：${message}`,
+      first.value,
+    );
+  }
+
+  return new Response(passthrough, {
     status: response.status,
     statusText: response.statusText,
     headers: response.headers,
   });
 }
-
 
 export async function callUpstream(options: UpstreamCallOptions): Promise<Response> {
   const { target, path, body, signal, globalProxy, logger, extraHeaders, sessionId, keyIndex } =
@@ -331,11 +351,13 @@ export async function callUpstream(options: UpstreamCallOptions): Promise<Respon
     });
   }
   try {
-    if (typeof body !== 'object' || body === null || (body as { stream?: unknown }).stream !== true) {
-      return response;
-    }
-    return await prefetchResponseBody(response);
+    const streaming =
+      typeof body === 'object' && body !== null && (body as { stream?: unknown }).stream === true;
+    return streaming
+      ? await preflightResponseBody(response)
+      : await preflightNonStreamingResponse(response);
   } catch (err) {
+    if (err instanceof UpstreamError) throw err;
     if (signal?.aborted) {
       throw new UpstreamError({ kind: 'canceled', message: '客户端已断开连接' });
     }
