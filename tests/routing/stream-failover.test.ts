@@ -44,6 +44,25 @@ function jsonError(): Response {
   return Response.json({ error: { message: 'upstream unavailable' } });
 }
 
+function openSse(data: string): {
+  response: Response;
+  close: () => void;
+} {
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+  const response = new Response(
+    new ReadableStream<Uint8Array>({
+      start(value) {
+        controller = value;
+        value.enqueue(new TextEncoder().encode(data));
+      },
+    }),
+  );
+  return {
+    response,
+    close: () => controller?.close(),
+  };
+}
+
 function route(first: ResolvedTarget, second: ResolvedTarget): Route {
   return {
     requested: 'free',
@@ -59,6 +78,36 @@ function route(first: ResolvedTarget, second: ResolvedTarget): Route {
 }
 
 describe('response preflight failover', () => {
+  test('returns a live SSE response after inspecting its first event', async () => {
+    const first = target('first');
+    const live = openSse('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n');
+    globalThis.fetch = (async () => live.response) as unknown as typeof fetch;
+
+    const store = new Store(':memory:');
+    try {
+      const dispatched = dispatch({
+        route: route(first, target('second')),
+        reqId: 'test',
+        ingress: 'cc',
+        logger: new Logger(),
+        store,
+        buildBody: () => ({ model: 'free', stream: true }),
+        resolvePath: () => '/chat/completions',
+      });
+      const outcome = await Promise.race([
+        dispatched.then((result) => ({ result })),
+        Bun.sleep(100).then(() => ({ timeout: true as const })),
+      ]);
+
+      live.close();
+      const result = await dispatched;
+      expect('timeout' in outcome).toBe(false);
+      expect(await result.response.text()).toContain('"content":"ok"');
+    } finally {
+      store.close();
+    }
+  });
+
   test('retries the same combo member after a first SSE error', async () => {
     const first = target('first');
     const responses = [sseError(), new Response('data: [DONE]\n\n')];

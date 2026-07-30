@@ -253,25 +253,35 @@ async function preflightResponseBody(response: Response): Promise<Response> {
   let first: IteratorResult<SseEvent>;
   try {
     first = await events.next();
-  } finally {
     await events.return(undefined);
-    await inspection.cancel();
+  } catch (error) {
+    await Promise.allSettled([
+      events.return(undefined),
+      inspection.cancel(),
+      passthrough.cancel(error),
+    ]);
+    throw error;
   }
 
+  // 取消 tee 的单个分支时，Promise 要等另一个分支结束才会 settle。成功路径不能
+  // 在把 passthrough 交给调用方前 await，否则真实的长连接 SSE 会在这里互相等待。
+  const inspectionCancellation = inspection.cancel();
+
   if (first.done) {
-    await passthrough.cancel();
+    await Promise.allSettled([inspectionCancellation, passthrough.cancel()]);
     throw new UpstreamStreamPreflightError('上游流在首个有效 SSE 数据前结束');
   }
 
   const message = sseErrorMessage(first.value);
   if (message !== undefined) {
-    await passthrough.cancel();
+    await Promise.allSettled([inspectionCancellation, passthrough.cancel()]);
     throw new UpstreamStreamPreflightError(
       `上游在首个 SSE 数据前返回错误：${message}`,
       first.value,
     );
   }
 
+  void inspectionCancellation.catch(() => undefined);
   return new Response(passthrough, {
     status: response.status,
     statusText: response.statusText,
