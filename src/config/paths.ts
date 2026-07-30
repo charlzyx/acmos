@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
@@ -13,9 +14,26 @@ export function expandPath(p: string, base?: string): string {
   return resolve(base ?? process.cwd(), out);
 }
 
-/** 配置根目录。优先 `ACMOS_HOME`，否则 `~/.acmos`。 */
+/** 从 Homebrew Cellar 内的可执行文件路径推导安装前缀。 */
+export function homebrewPrefixFromExecutable(executable: string): string | undefined {
+  const marker = '/Cellar/acmos/';
+  const index = executable.indexOf(marker);
+  return index > 0 ? executable.slice(0, index) : undefined;
+}
+
+function defaultDataDir(): string {
+  try {
+    const prefix = homebrewPrefixFromExecutable(realpathSync(process.execPath));
+    if (prefix) return join(prefix, 'var', 'acmos');
+  } catch {
+    // 无法解析可执行文件时退回用户目录。
+  }
+  return expandPath('~/.acmos');
+}
+
+/** 配置根目录。优先 `ACMOS_HOME`；Homebrew 安装使用其 var/acmos，否则使用 ~/.acmos。 */
 export function dataDir(): string {
-  return expandPath(process.env.ACMOS_HOME ?? '~/.acmos');
+  return process.env.ACMOS_HOME ? expandPath(process.env.ACMOS_HOME) : defaultDataDir();
 }
 
 /** 配置文件路径。优先 `ACMOS_CONFIG`。 */

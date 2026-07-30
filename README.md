@@ -29,7 +29,7 @@ Prepare Homebrew service configuration:
 ```bash
 ACMOS_HOME="$(brew --prefix)/var/acmos"
 mkdir -p "$ACMOS_HOME"
-curl -fsSL https://raw.githubusercontent.com/charlzyx/acmos/v0.1.6/config.example.yml \
+curl -fsSL https://raw.githubusercontent.com/charlzyx/acmos/v0.1.7/config.example.yml \
   -o "$ACMOS_HOME/config.yml"
 ```
 
@@ -404,7 +404,7 @@ brew install acmos
 ```bash
 ACMOS_HOME="$(brew --prefix)/var/acmos"
 mkdir -p "$ACMOS_HOME"
-curl -fsSL https://raw.githubusercontent.com/charlzyx/acmos/v0.1.6/config.example.yml \
+curl -fsSL https://raw.githubusercontent.com/charlzyx/acmos/v0.1.7/config.example.yml \
   -o "$ACMOS_HOME/config.yml"
 ```
 
