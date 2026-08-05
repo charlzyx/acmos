@@ -212,14 +212,14 @@ export const comboSchema = z
 export type ComboConfig = z.infer<typeof comboSchema>;
 
 /**
- * 视觉 sidecar：当目标或 combo fallback 不支持视觉输入时，先由视觉模型 OCR/描述，
- * 再把图片替换为文本描述交给原目标。默认关闭，避免额外延迟与跨模型语义变化。
+ * 视觉 sidecar：当目标或 combo fallback 不支持视觉输入时，按顺序用直连视觉模型
+ * OCR/描述，再把图片替换为文本描述。默认关闭，避免额外延迟与跨模型语义变化。
  */
 export const visionSidecarSchema = z
   .object({
     enabled: z.boolean().default(false),
-    /** 必须是已配置的、支持视觉的直连模型，默认 Codex Luna。 */
-    model: z.string().min(1).default('codex/gpt-5.6-luna'),
+    /** 必须是已配置的、支持视觉的直连模型；按顺序在可重试失败时切换。 */
+    models: z.array(z.string().min(1)).min(1).default(['codex/gpt-5.6-luna']),
     maxTokens: z.number().int().positive().default(1_024),
   })
   .strict();

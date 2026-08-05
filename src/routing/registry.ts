@@ -56,7 +56,10 @@ function mergeCompat(
   };
 }
 
-function mergeMeta(fromCatalog: ModelMeta | undefined, override: ModelConfig | undefined): ModelMeta {
+function mergeMeta(
+  fromCatalog: ModelMeta | undefined,
+  override: ModelConfig | undefined,
+): ModelMeta {
   const user = <T>(value: T | undefined, field: ModelMetaField): Record<string, ModelMetaSource> =>
     value !== undefined ? { [field]: 'user' } : {};
   return {
@@ -85,7 +88,10 @@ function mergeMeta(fromCatalog: ModelMeta | undefined, override: ModelConfig | u
  * 启用且可用的视觉 sidecar 会在请求含图片时转写内容，因此 combo 可公开 vision=true。
  * 任一成员未知时不宣称长度上限，避免客户端据此发送无法被 fallback 接收的请求。
  */
-function comboMeta(targets: ResolvedTarget[], visionSidecarAvailable: boolean): ModelMeta | undefined {
+function comboMeta(
+  targets: ResolvedTarget[],
+  visionSidecarAvailable: boolean,
+): ModelMeta | undefined {
   if (targets.length === 0) return undefined;
   const allDefined = (field: 'contextWindow' | 'maxOutputTokens'): number | undefined => {
     const values = targets.map((target) => target.meta[field]);
@@ -152,16 +158,12 @@ export class Registry {
           meta: mergeMeta(entry.meta, entry.model),
           // thinking：配置覆盖 > provider 默认 > catalog 推导
           thinking:
-            entry.model?.thinking ??
-            provider.defaults.thinking ??
-            entry.meta?.thinkingConfig,
+            entry.model?.thinking ?? provider.defaults.thinking ?? entry.meta?.thinkingConfig,
           compat: mergeCompat(
             {
               ...provider.defaults.compat,
               // catalog 标注不支持采样时，作为 provider 级默认的下层兜底
-              ...(entry.meta?.supportsSampling === false
-                ? { supportsSampling: false }
-                : {}),
+              ...(entry.meta?.supportsSampling === false ? { supportsSampling: false } : {}),
             },
             entry.model?.compat,
           ),
@@ -177,7 +179,6 @@ export class Registry {
       if (combo) this.combos.set(comboId, combo);
     }
   }
-
 
   resolve(requested: string): Route | undefined {
     const comboId = requested.startsWith('combo/') ? requested.slice('combo/'.length) : requested;
@@ -208,8 +209,7 @@ export class Registry {
   private visionSidecarAvailable(): boolean {
     const config = this.loaded.config.visionSidecar;
     if (!config.enabled) return false;
-    const target = this.byQualified.get(config.model);
-    return target?.meta.vision === true;
+    return config.models.some((model) => this.byQualified.get(model)?.meta.vision === true);
   }
   /** `GET /v1/models` 的数据源：combo 在前，具体模型在后。 */
   listModels(): Array<{ id: string; ownedBy: string; meta?: ModelMeta }> {

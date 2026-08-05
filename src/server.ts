@@ -150,17 +150,20 @@ async function collectCcSse(stream: ReadableStream<Uint8Array>): Promise<Record<
 }
 
 /** 返回配置的直连视觉模型；sidecar 模型不能是 combo，避免 OCR 请求递归进入 fallback。 */
-function visionSidecarTargetOf(ctx: AppContext): ResolvedTarget | undefined {
+function visionSidecarTargetsOf(ctx: AppContext): ResolvedTarget[] {
   const config = ctx.loaded.config.visionSidecar;
-  if (!config.enabled) return undefined;
-  const route = ctx.registry.resolve(config.model);
-  if (!route || route.combo || route.targets.length !== 1) {
-    ctx.logger.warn('识图 sidecar 模型不可解析为直连模型，已禁用本次转写', {
-      model: config.model,
-    });
-    return undefined;
+  if (!config.enabled) return [];
+  const targets: ResolvedTarget[] = [];
+  for (const model of config.models) {
+    const route = ctx.registry.resolve(model);
+    const target = route?.targets[0];
+    if (!route || route.combo || route.targets.length !== 1 || !target) {
+      ctx.logger.warn('识图 sidecar 模型不可解析为直连模型，已跳过', { model });
+      continue;
+    }
+    targets.push(target);
   }
-  return route.targets[0];
+  return targets;
 }
 
 /** 仅当当前实际候选不支持图片时，调用配置的视觉 sidecar 把图片转成文本。 */
@@ -171,11 +174,11 @@ async function applyVisionSidecar(
   signal: AbortSignal,
   descriptions: Map<string, string>,
 ): Promise<CcRequestBody['messages']> {
-  const visualTarget = visionSidecarTargetOf(ctx);
-  if (!visualTarget || !Array.isArray(messages)) return messages;
+  const visualTargets = visionSidecarTargetsOf(ctx);
+  if (visualTargets.length === 0 || !Array.isArray(messages)) return messages;
   const result = await maybeUseVisionSidecar({
     target,
-    visionTarget: visualTarget,
+    visionTargets: visualTargets,
     messages,
     maxTokens: ctx.loaded.config.visionSidecar.maxTokens,
     logger: ctx.logger,

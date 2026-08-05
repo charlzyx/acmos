@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, copyFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ConfigError, loadAcmosConfig } from '../../src/config/load.ts';
@@ -46,6 +46,12 @@ describe('loadAcmosConfig', () => {
     expect(config.log.captureBody).toBe(false);
     expect(config.catalog.url).toBe('https://models.dev/api.json');
     expect(config.combo.fast?.sticky).toBe(true);
+  });
+
+  test('视觉 sidecar 默认配置使用有序模型列表', async () => {
+    write('config.yml', MINIMAL);
+    const { config } = await loadAcmosConfig();
+    expect(config.visionSidecar.models).toEqual(['codex/gpt-5.6-luna']);
   });
 
   test('apiKey 简写归一成 bearer auth', async () => {
@@ -221,9 +227,10 @@ providers:
   test('仓库里的 config.example.yml 可以直接加载', async () => {
     write('.env', 'OPENCODE_KEY_1=sk-a\nDEEPSEEK_API_KEY=sk-b\nARK_API_KEY=sk-c\n');
     copyFileSync(join(import.meta.dir, '../../config.example.yml'), join(home, 'config.yml'));
-
     const { config, auth } = await loadAcmosConfig();
+
     expect(config.port).toBe(20129);
+    expect(config.visionSidecar.models).toEqual(['codex/gpt-5.6-luna']);
     expect(Object.keys(config.providers)).toContain('codex');
     expect(config.providers.codex?.wire).toBe('resp');
     expect(auth.codex?.type).toBe('chatgpt-oauth');

@@ -31,11 +31,12 @@ catalog:
   url: https://models.dev/api.json
   ttlHours: 24
 
-# 图片旁路：combo 收到图片且任一 fallback 不支持视觉时，先用 Luna 生成文本描述。
+# 图片旁路：combo 收到图片且任一 fallback 不支持视觉时，按顺序用视觉模型生成文本描述。
 # 视觉能力来自 models.dev 的 modalities.input 是否含 image；开启后 combo 会声明 vision=true。
 visionSidecar:
   enabled: true
-  model: codex/gpt-5.6-luna
+  models:
+    - codex/gpt-5.6-luna
   maxTokens: 1024
 
 # 默认同步每个上游的 `<baseUrl>/models`。上游明确元数据优先于 models.dev；

@@ -218,10 +218,10 @@ log:
   file: true
   captureBody: false      # logs request/response bodies when enabled; short-term debugging only
   retentionDays: 7
-
 visionSidecar:
   enabled: true
-  model: codex/gpt-5.6-luna
+  models:
+    - codex/gpt-5.6-luna
   maxTokens: 1024
 ```
 
@@ -271,11 +271,11 @@ combo:
 `visionSidecar` processes the internal normalized `image_url` content block; both Chat Completions and Anthropic image inputs go through this:
 
 1. Target model declares `vision: true`: original image sent directly.
-2. Target doesn't support vision: sidecar calls a direct vision model to describe the image.
+2. Target doesn't support vision: sidecar calls configured direct vision models in order to describe the image.
 3. acmos replaces the image with `[image: ...]` text, then sends to the target.
-4. Sidecar failure: original request is preserved; the error is logged.
+4. A failed sidecar attempts the next configured model; when all fail, the original request is preserved and the error is logged.
 
-The sidecar model must be a configured direct vision model, not a combo, to avoid recursive fallback.
+Sidecar models must be configured direct vision models, not combos, to avoid recursive fallback.
 
 ## CLI Integration
 
@@ -596,7 +596,8 @@ log:
 
 visionSidecar:
   enabled: true
-  model: codex/gpt-5.6-luna
+  models:
+    - codex/gpt-5.6-luna
   maxTokens: 1024
 ```
 
@@ -640,15 +641,14 @@ combo:
       - { provider: opencode, model: glm-5.2 }          # cc
       - { provider: deepseek-am, model: deepseek-v4-flash } # am
 ```
-
 ### 视觉 sidecar
 
 `visionSidecar` 处理内部归一后的 `image_url` 内容块；Chat Completions 与 Anthropic 图片输入都会经过这一步：
 
 1. 目标模型已声明 `vision: true`：原图直接发送。
-2. 目标不支持视觉：sidecar 直连视觉模型生成描述。
-3. acmos 将图片替换为 `[image: ...]` 文本，再请求原目标。
-4. sidecar 失败：保留原始请求；日志会记录失败原因。
+2. 目标不支持视觉：按 `models` 的配置顺序调用直连视觉模型生成描述。
+3. acmos 将图片替换成 `[image: ...]` 文本，再发送给目标。
+4. sidecar 的可重试失败会切换下一个模型；全部失败时保留原请求并记录错误。
 
 sidecar 模型必须是已配置的直连视觉模型，不能是 combo，避免递归 fallback。
 
