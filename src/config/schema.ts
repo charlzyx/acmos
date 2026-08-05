@@ -117,11 +117,11 @@ export type ModelConfig = z.infer<typeof modelSchema>;
 export const authSchema = z
   .object({
     type: z.enum(['bearer', 'header', 'chatgpt-oauth', 'none']).default('bearer'),
-    /** 一把或多把 key。多把时按 `keyStrategy` 轮转。 */
+    /** 一把或多把 key。多 key 默认在可重试失败时依次切换。 */
     keys: z.array(z.string()).default([]),
     /** `type: header` 时的头名。 */
     header: z.string().optional(),
-    keyStrategy: z.enum(['round-robin', 'sticky', 'failover']).default('round-robin'),
+    keyStrategy: z.enum(['round-robin', 'sticky', 'failover']).default('failover'),
     /** `chatgpt-oauth` 的凭据文件位置。 */
     credentialsPath: z.string().optional(),
   })

@@ -127,7 +127,7 @@ export class Registry {
       const providerAuth = auth[providerId] ?? {
         type: 'none' as const,
         keys: [],
-        keyStrategy: 'round-robin' as const,
+        keyStrategy: 'failover' as const,
       };
       const catalogProvider = provider.catalogProvider ?? providerId;
       const declared = provider.models;

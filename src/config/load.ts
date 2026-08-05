@@ -91,9 +91,9 @@ function normalizeAuth(providerId: string, provider: Config['providers'][string]
   if (explicit) return explicit;
   if (shorthand !== undefined) {
     const keys = Array.isArray(shorthand) ? shorthand : [shorthand];
-    return { type: 'bearer', keys, keyStrategy: 'round-robin' };
+    return { type: 'bearer', keys, keyStrategy: 'failover' };
   }
-  return { type: 'none', keys: [], keyStrategy: 'round-robin' };
+  return { type: 'none', keys: [], keyStrategy: 'failover' };
 }
 
 /** schema 之外的交叉校验：引用完整性、代理可用性。 */

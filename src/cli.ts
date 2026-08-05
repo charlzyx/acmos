@@ -21,7 +21,7 @@ import { logger } from './log/logger.ts';
 import { createServer } from './server.ts';
 
 const NAME = 'acmos';
-const VERSION = '0.1.10';
+const VERSION = '0.1.11';
 const START_TIMEOUT_MS = 5_000;
 
 interface RuntimeInfo {

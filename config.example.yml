@@ -61,7 +61,7 @@ providers:
     wire: cc
     baseUrl: https://opencode.ai/zen/v1
     catalogProvider: opencode
-    # 多把 key 会按 keyStrategy 轮转；这里用数组即可
+    # 多把 key 在可重试失败时会自动切换；需要轮询时显式指定 keyStrategy: round-robin
     apiKey:
       - "${env:OPENCODE_KEY_1}"
     models:

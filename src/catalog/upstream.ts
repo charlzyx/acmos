@@ -130,7 +130,7 @@ export async function fetchUpstreamDirectories(options: {
           headers: await headersFor({
             providerId,
             provider,
-            auth: auth[providerId] ?? { type: 'none', keys: [], keyStrategy: 'round-robin' },
+            auth: auth[providerId] ?? { type: 'none', keys: [], keyStrategy: 'failover' },
             globalProxy: config.proxy,
             logger,
           }),

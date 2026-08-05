@@ -54,7 +54,7 @@ describe('loadAcmosConfig', () => {
     expect(auth.deepseek).toEqual({
       type: 'bearer',
       keys: ['sk-test'],
-      keyStrategy: 'round-robin',
+      keyStrategy: 'failover',
     });
   });
 
