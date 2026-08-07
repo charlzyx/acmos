@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import type { ProviderConfig } from '../../src/config/schema.ts';
 import { Logger } from '../../src/log/logger.ts';
 import type { ResolvedTarget } from '../../src/routing/registry.ts';
+import { UpstreamCompatibilityError } from '../../src/upstream/client.ts';
 import { maybeUseVisionSidecar } from '../../src/vision/sidecar.ts';
 
 const originalFetch = globalThis.fetch;
@@ -75,14 +76,14 @@ describe('vision sidecar failover', () => {
     ]);
   });
 
-  test('does not attempt a backup after a non-retryable failure', async () => {
+  test('rejects a text-only target when sidecars are unavailable', async () => {
     const calls: string[] = [];
     globalThis.fetch = (async (url) => {
       calls.push(String(url));
       return new Response('invalid input', { status: 400 });
     }) as typeof fetch;
 
-    const result = await maybeUseVisionSidecar({
+    const result = maybeUseVisionSidecar({
       target: target('text', false),
       visionTargets: [target('primary', true), target('backup', true)],
       messages: imageMessages,
@@ -90,8 +91,20 @@ describe('vision sidecar failover', () => {
       logger: new Logger(),
     });
 
+    await expect(result).rejects.toThrow(UpstreamCompatibilityError);
     expect(calls).toEqual(['https://primary.test/v1/chat/completions']);
-    expect(result.sidecarUsed).toBe(false);
-    expect(result.messages).toBe(imageMessages);
+  });
+
+  test('rejects when no vision sidecar is configured', async () => {
+    const result = maybeUseVisionSidecar({
+      target: target('text', false),
+      visionTargets: [],
+      messages: imageMessages,
+      maxTokens: 128,
+      logger: new Logger(),
+    });
+
+    await expect(result).rejects.toBeInstanceOf(UpstreamCompatibilityError);
+    await expect(result).rejects.toThrow(/没有可用的视觉 sidecar 模型/);
   });
 });

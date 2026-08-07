@@ -1,6 +1,11 @@
 import type { Logger } from '../log/logger.ts';
 import type { ResolvedTarget } from '../routing/registry.ts';
-import { callUpstream, isFailoverable, UpstreamError } from '../upstream/client.ts';
+import {
+  callUpstream,
+  isFailoverable,
+  UpstreamCompatibilityError,
+  UpstreamError,
+} from '../upstream/client.ts';
 import { parseSseStream } from '../upstream/sse.ts';
 import { buildCcRequest, type CcMessage, type CcRequestBody } from '../wire/cc/request.ts';
 import { translateResponsesSseToCc } from '../wire/resp/decode.ts';
@@ -87,7 +92,9 @@ async function readDescription(stream: ReadableStream<Uint8Array>): Promise<stri
 
 /**
  * 当目标模型不支持图片时，依序使用视觉 sidecar 生成描述并替换全部图片。
- * 所有 sidecar 失败时保留原始请求，避免辅助能力影响正常请求的可用性。
+ * 所有 sidecar 失败或没有可用的视觉模型时抛 `UpstreamCompatibilityError`，
+ * 由调度层跳过该目标（combo 换下一个成员，直连则透传错误给客户端），
+ * 避免把图片硬塞给纯文本模型导致上游必然 400。
  */
 export async function maybeUseVisionSidecar(
   opts: VisionSidecarOptions,
@@ -96,16 +103,16 @@ export async function maybeUseVisionSidecar(
     opts;
   if (target.meta.vision === true) return { messages, sidecarUsed: false };
   const visualTargets = visionTargets.filter((visualTarget) => visualTarget.meta.vision === true);
-  if (visualTargets.length === 0) {
-    logger.warn('没有支持图片的视觉 sidecar 模型，跳过转写', {
-      provider: target.providerId,
-      model: target.modelId,
-    });
-    return { messages, sidecarUsed: false };
-  }
-
   const images = imageParts(messages);
   if (images.length === 0) return { messages, sidecarUsed: false };
+
+  if (visualTargets.length === 0) {
+    const error = new UpstreamCompatibilityError(
+      `目标 ${target.providerId}/${target.modelId} 不支持图片，且没有可用的视觉 sidecar 模型，无法转写`,
+    );
+    logger.warn(error.message, { provider: target.providerId, model: target.modelId });
+    throw error;
+  }
 
   try {
     const rewritten = messages.map((message) => ({ ...message }));
@@ -171,11 +178,11 @@ export async function maybeUseVisionSidecar(
     }
     return { messages: rewritten, sidecarUsed: true };
   } catch (err) {
-    logger.warn('所有识图 sidecar 均失败，保留原始图片', {
-      provider: target.providerId,
-      model: target.modelId,
-      error: String(err),
-    });
-    return { messages, sidecarUsed: false };
+    const reason = err instanceof Error ? err.message : String(err);
+    const error = new UpstreamCompatibilityError(
+      `目标 ${target.providerId}/${target.modelId} 不支持图片，且视觉 sidecar 均不可用：${reason}`,
+    );
+    logger.warn(error.message, { provider: target.providerId, model: target.modelId });
+    throw error;
   }
 }

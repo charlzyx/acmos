@@ -4,6 +4,7 @@ import { Logger } from '../../src/log/logger.ts';
 import { dispatch } from '../../src/routing/dispatch.ts';
 import type { ResolvedTarget, Route } from '../../src/routing/registry.ts';
 import { Store } from '../../src/state/store.ts';
+import { UpstreamCompatibilityError } from '../../src/upstream/client.ts';
 
 const originalFetch = globalThis.fetch;
 
@@ -204,6 +205,36 @@ describe('response preflight failover', () => {
 
       expect(result.target.providerId).toBe('second');
       expect(result.attempt).toBe(3);
+      expect(await result.response.json()).toEqual({ id: 'fallback' });
+    } finally {
+      store.close();
+    }
+  });
+
+  test('skips an incompatible combo member', async () => {
+    const first = target('first');
+    const second = target('second');
+    globalThis.fetch = (async () => Response.json({ id: 'fallback' })) as unknown as typeof fetch;
+
+    const store = new Store(':memory:');
+    try {
+      const result = await dispatch({
+        route: route(first, second),
+        reqId: 'test',
+        ingress: 'cc',
+        logger: new Logger(),
+        store,
+        buildBody: (candidate) => {
+          if (candidate === first) {
+            throw new UpstreamCompatibilityError('first cannot process images');
+          }
+          return { model: 'free', stream: false };
+        },
+        resolvePath: () => '/chat/completions',
+      });
+
+      expect(result.target.providerId).toBe('second');
+      expect(result.attempt).toBe(1);
       expect(await result.response.json()).toEqual({ id: 'fallback' });
     } finally {
       store.close();

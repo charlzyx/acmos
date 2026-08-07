@@ -174,12 +174,13 @@ async function applyVisionSidecar(
   signal: AbortSignal,
   descriptions: Map<string, string>,
 ): Promise<CcRequestBody['messages']> {
+  const sourceMessages = messages;
+  if (!Array.isArray(sourceMessages)) return sourceMessages;
   const visualTargets = visionSidecarTargetsOf(ctx);
-  if (visualTargets.length === 0 || !Array.isArray(messages)) return messages;
   const result = await maybeUseVisionSidecar({
     target,
     visionTargets: visualTargets,
-    messages,
+    messages: sourceMessages,
     maxTokens: ctx.loaded.config.visionSidecar.maxTokens,
     logger: ctx.logger,
     globalProxy: ctx.loaded.config.proxy,
